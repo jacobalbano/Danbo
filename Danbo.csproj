@@ -17,6 +17,7 @@
     <None Remove=".editorconfig" />
     <None Remove=".gitattributes" />
     <None Remove=".gitignore" />
+    <None Remove="danbo.png" />
     <None Remove="LICENSE" />
   </ItemGroup>
 

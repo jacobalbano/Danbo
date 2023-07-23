@@ -16,6 +16,7 @@ public class UserRoleApi
         return database.Select<UserRole>()
             .ToEnumerable()
             .Select(x => x.Id)
+            .OrderBy(x => x)
             .ToList();
     }
 

@@ -39,6 +39,11 @@ public partial class UserRoleModule : InteractionModuleBase<SocketInteractionCon
                 throw new FollowupError("You don't currently have that role");
             await user.RemoveRoleAsync(id);
         }
+
+        await FollowupAsync(embed: new EmbedBuilder()
+            .WithDescription($"Removed {MentionUtils.MentionRole(id)}")
+            .Build()
+        );
     }
 
     [SlashCommand("assign", "Assign a user-assigned role to yourself")]

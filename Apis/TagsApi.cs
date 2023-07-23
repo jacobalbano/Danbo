@@ -36,6 +36,8 @@ public class TagsApi
         return database
             .Select<Tag>()
             .Select(x => x.Name)
+            .ToEnumerable()
+            .OrderBy(x => x)
             .ToList();
     }
 

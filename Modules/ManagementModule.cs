@@ -36,7 +36,7 @@ public class ManagementModule : InteractionModuleBase<SocketInteractionContext>
             else
             {
                 audit.Audit("Removed user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
-                userRoles.DisableUserRole(role.Id);
+                userRoles.EnableUserRole(role.Id);
                 return "Role has been removed";
             }
         });
