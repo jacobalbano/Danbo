@@ -30,14 +30,14 @@ public class ManagementModule : InteractionModuleBase<SocketInteractionContext>
             if (userRoles.GetUserRoles().Contains(role.Id))
             {
                 userRoles.DisableUserRole(role.Id);
-                audit.Audit("Added user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
-                return "Role has been added";
+                audit.Audit("Removed user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
+                return "Role has been removed";
             }
             else
             {
-                audit.Audit("Removed user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
+                audit.Audit("Added user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
                 userRoles.EnableUserRole(role.Id);
-                return "Role has been removed";
+                return "Role has been added";
             }
         });
     }
