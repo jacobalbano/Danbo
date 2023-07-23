@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "Danbo": {
+      "commandName": "Project",
+      "workingDirectory": "$(ProjectDir)/Environment"
+    }
+  }
+}
