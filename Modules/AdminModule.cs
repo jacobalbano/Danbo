@@ -12,9 +12,8 @@ using Microsoft.Extensions.Logging;
 
 namespace Danbo.Modules;
 
-[RequireOwner]
 [Group("admin", "Bot administration functions")]
-[DefaultMemberPermissions(GuildPermission.Administrator)]
+[RequireOwner, DefaultMemberPermissions(GuildPermission.ManageGuild)]
 public class AdminModule : ModuleBase
 {
     [SlashCommand("run-diagnostics", "Run various diagnostics to see how the bot can be expected to perform", runMode: RunMode.Async)]
@@ -47,7 +46,7 @@ public class AdminModule : ModuleBase
     }
 
     [SlashCommand("export-stafflog", "Read through the staff log channel and collect/parse historical data")]
-    [RequireOwner, DefaultMemberPermissions(GuildPermission.ModerateMembers)]
+    [DefaultMemberPermissions(GuildPermission.ModerateMembers)]
     public async Task ExportStaffLog()
     {
         var defer = DeferAsync();
@@ -62,7 +61,7 @@ public class AdminModule : ModuleBase
     }
 
     [SlashCommand("import-stafflog", "Upload a file containing infractions to be imported into user records")]
-    [RequireOwner, DefaultMemberPermissions(GuildPermission.ModerateMembers)]
+    [DefaultMemberPermissions(GuildPermission.ModerateMembers)]
     public async Task ImportStafflog(IAttachment attachment)
     {
         var defer = DeferAsync();
