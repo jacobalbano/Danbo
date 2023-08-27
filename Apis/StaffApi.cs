@@ -81,7 +81,7 @@ public class StaffApi
         {
             var existingInfractions = s.Select<Infraction>()
                 .Where(x => x.UserId == userId)
-                .ToEnumerable() // TODO: see if we can get rid of this? it crashes with IConvertable error
+                .ToEnumerable() // TODO: see if we can get rid of this? here to prevent crash with IConvertable error
                 .Select(x => x.InfractionInstant)
                 .ToHashSet();
 

@@ -21,7 +21,7 @@ public class DynoLogParser : IStaffLogParser
             yield break;
 
         var embed = message.Embeds.First();
-        var typeMatch = titleParser.Match(embed.Title);
+        var typeMatch = titleParser.Match(embed.Title ?? string.Empty);
         if (!typeMatch.Success)
             yield break;
 

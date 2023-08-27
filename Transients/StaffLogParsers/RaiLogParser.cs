@@ -37,12 +37,12 @@ public class RaiLogParser : IStaffLogParser
 
         var userMatch = idParser.Match(embed.Fields.FirstOrDefault(x => x.Name == "User").Value);
         if (!userMatch.Success) yield break;
-        if (!ulong.TryParse(userMatch.Captures[1].Value, out var userId)) yield break;
+        if (!ulong.TryParse(userMatch.Groups[1].Value, out var userId)) yield break;
 
         if (embed.Footer == null) yield break;
         var modMatch = idParser.Match(embed.Footer.Value.Text);
         if (!modMatch.Success) yield break;
-        if (!ulong.TryParse(modMatch.Captures[1].Value, out var modId)) yield break;
+        if (!ulong.TryParse(modMatch.Groups[1].Value, out var modId)) yield break;
 
         var reason = embed.Fields.FirstOrDefault(x => x.Name == "Reason").Value;
         if (string.IsNullOrEmpty(reason)) yield break;
@@ -79,6 +79,6 @@ public class RaiLogParser : IStaffLogParser
         };
     }
 
-    private static readonly Regex idParser = new(@"\(\d{17,}\)", RegexOptions.Compiled);
+    private static readonly Regex idParser = new(@"\((\d{17,})\)", RegexOptions.Compiled);
     private static readonly Regex durationParser = new(@"^(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m)?", RegexOptions.Compiled);
 }
