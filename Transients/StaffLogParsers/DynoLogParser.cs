@@ -21,11 +21,11 @@ public class DynoLogParser : IStaffLogParser
             yield break;
 
         var embed = message.Embeds.First();
-        var typeMatch = titleParser.Match(embed.Title ?? string.Empty);
+        var typeMatch = titleParser.Match(embed.Author.ToString() ?? string.Empty);
         if (!typeMatch.Success)
             yield break;
 
-        InfractionType? type = typeMatch.Captures[1].Value switch
+        InfractionType? type = typeMatch.Groups[1].Value switch
         {
             "Ban" => InfractionType.Ban,
             "Kick" => InfractionType.Other,
