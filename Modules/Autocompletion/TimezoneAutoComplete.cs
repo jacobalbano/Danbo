@@ -8,7 +8,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Danbo.TypeConverters;
+namespace Danbo.Modules.Autocompletion;
 
 public class TimezoneAutoComplete : AutocompleteHandler
 {
@@ -22,7 +22,7 @@ public class TimezoneAutoComplete : AutocompleteHandler
             .Where(x => x.Count > 0)
             .OrderByDescending(x => x.Count)
             .Select(x => new AutocompleteResult(x.Result, x.Result))
-            .Take(5)
+            .Take(25)
         ));
     }
 

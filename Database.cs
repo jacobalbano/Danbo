@@ -1,6 +1,7 @@
 ﻿using Danbo.Models;
 using Danbo.Services;
 using Danbo.Utility;
+using Danbo.Utility.DependencyInjection;
 using LiteDB;
 using System.IO;
 using System.Linq.Expressions;
@@ -11,20 +12,10 @@ namespace Danbo;
 [AutoDiscoverScoped]
 public class Database
 {
-    public static Database GetInstance(ulong id)
-    {
-        return new Database(id);
-    }
-
     public Database(ScopedGuildId gid)
     {
         if (gid.Id != null)
             db = GetShared(gid.Id.Value);
-    }
-
-    private Database(ulong id)
-    {
-        db = GetShared(id);
     }
 
     private static LiteDatabase GetShared(ulong id)
@@ -168,8 +159,16 @@ public class Database
                 if (propInfo.GetCustomAttribute<BsonConverterAttribute>() is BsonConverterAttribute attr)
                 {
                     if (!converters.TryGetValue(attr.ConverterType, out var converter))
-                        converter = (IBsonConverter) Activator.CreateInstance(attr.ConverterType)!;
-                    mapper.RegisterType(propInfo.PropertyType, converter.Serialize, converter.Deserialize);
+                    {
+                        converter = (IBsonConverter)Activator.CreateInstance(attr.ConverterType)!;
+                        converters[attr.ConverterType] = converter;
+                    }
+
+                    var type = propInfo.PropertyType;
+                    if (Nullable.GetUnderlyingType(type) is Type underType)
+                        type = underType;
+
+                    mapper.RegisterType(type, converter.Serialize, converter.Deserialize);
                 }
             }
 

@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Danbo.Utility;
+namespace Danbo.Utility.DependencyInjection;
 
 [AttributeUsage(AttributeTargets.Class, AllowMultiple = false)]
 public class ForceInitializationAttribute : Attribute

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace Danbo.Models.Config;
 
-internal record class OntopicConfig : ModelBase
+public record class OntopicConfig : ModelBase
 {
     public ulong RoleId { get; init; }
 }

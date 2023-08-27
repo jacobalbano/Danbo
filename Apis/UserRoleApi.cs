@@ -1,5 +1,6 @@
 ﻿using Danbo.Models;
 using Danbo.Utility;
+using Danbo.Utility.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,8 +15,8 @@ public class UserRoleApi
     public IReadOnlyList<ulong> GetUserRoles()
     {
         return database.Select<UserRole>()
-            .ToEnumerable()
             .Select(x => x.Id)
+            .ToEnumerable()
             .OrderBy(x => x)
             .ToList();
     }

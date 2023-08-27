@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Danbo.Utility.DependencyInjection;
 
 namespace Danbo.Services
 {
@@ -35,6 +36,7 @@ namespace Danbo.Services
             return msg.Severity switch
             {
                 LogSeverity.Critical => LogLevel.Critical,
+                LogSeverity.Error when msg.Exception is TaskCanceledException => LogLevel.Debug,
                 LogSeverity.Error => LogLevel.Error,
                 LogSeverity.Warning => LogLevel.Warning,
                 LogSeverity.Info => LogLevel.Information,

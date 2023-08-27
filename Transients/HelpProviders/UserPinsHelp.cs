@@ -1,4 +1,5 @@
-﻿using System;
+﻿using Discord;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -10,5 +11,9 @@ internal class UserPinsHelp : IHelpProvider
 {
     public string FeatureName { get; } = "User Pins";
 
-    public string FeatureDescription { get; } = "React with the 📌 emoji to pin messages in a thread you created";
+    public IAsyncEnumerable<string> FeaturesAvailable(IInteractionContext context)
+    {
+        return new[] { "React with the 📌 emoji to pin messages in a thread you created" }
+            .ToAsyncEnumerable();
+    }
 }

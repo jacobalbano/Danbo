@@ -11,13 +11,13 @@ using Danbo.Models;
 using Danbo.Apis;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Danbo.TypeConverters;
+namespace Danbo.Modules.Autocompletion;
 
 public class UserRoleAutocomplete : AutocompleteHandler
 {
     public override Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)
     {
-        var db = Database.GetInstance(context.Guild.Id);
+        var db = services.GetRequiredService<Database>();
         var search = (autocompleteInteraction.Data.Current.Value as string ?? string.Empty)
             .ToUpperInvariant()
             .Split(' ');
@@ -28,7 +28,7 @@ public class UserRoleAutocomplete : AutocompleteHandler
             .Where(x => x.Count > 0)
             .OrderByDescending(x => x.Count)
             .Select(x => new AutocompleteResult(x.Role.Name, x.Role.Id.ToString()))
-            .Take(5);
+            .Take(25);
         return Task.FromResult(AutocompletionResult.FromSuccess(result));
     }
 

@@ -3,6 +3,7 @@ using Danbo.Models.Config;
 using Danbo.Models.Jobs;
 using Danbo.Services;
 using Danbo.Utility;
+using Danbo.Utility.DependencyInjection;
 using Discord;
 using NodaTime;
 using System;
@@ -58,10 +59,7 @@ public class OntopicApi
 
     public void SetOntopicRoleId(ulong? roleId)
     {
-        var insert = (GetConfig() ?? new OntopicConfig())
-            with
-        { RoleId = roleId ?? 0 };
-
+        var insert = (GetConfig() ?? new()) with { RoleId = roleId ?? 0 };
         using var s = database.BeginSession();
         if (roleId == null) s.Delete(insert);
         else s.InsertOrUpdate(insert);

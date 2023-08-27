@@ -19,11 +19,13 @@
     <None Remove=".gitignore" />
     <None Remove="danbo.png" />
     <None Remove="LICENSE" />
+    <None Remove="Modules\HelpModule.cs~RF2f62f4a8.TMP" />
   </ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Discord.Net" Version="3.9.0" />
-		<PackageReference Include="LiteDB" Version="5.0.15" />
+		<PackageReference Include="Discord.Net" Version="3.12.0" />
+		<PackageReference Include="IdGen" Version="3.0.3" />
+		<PackageReference Include="LiteDB" Version="5.0.17" />
 		<PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="7.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Logging" Version="7.0.0" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Console" Version="7.0.0" />
@@ -32,8 +34,8 @@
 			<PrivateAssets>all</PrivateAssets>
 			<IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>
-		<PackageReference Include="NodaTime" Version="3.1.6" />
-		<PackageReference Include="Serilog.AspNetCore" Version="6.1.0" />
+		<PackageReference Include="NodaTime" Version="3.1.9" />
+		<PackageReference Include="Serilog.AspNetCore" Version="7.0.0" />
 		<PackageReference Include="Serilog.Sinks.Console" Version="4.1.0" />
 		<PackageReference Include="Serilog.Sinks.File" Version="5.0.0" />
 	</ItemGroup>

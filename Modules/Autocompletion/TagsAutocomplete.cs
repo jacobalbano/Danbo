@@ -9,8 +9,9 @@ using System.Threading.Tasks;
 using Danbo.Apis;
 using Danbo.Services;
 using Microsoft.Extensions.DependencyInjection;
+using Danbo.Utility;
 
-namespace Danbo.TypeConverters;
+namespace Danbo.Modules.Autocompletion;
 
 public class TagsAutocomplete : AutocompleteHandler
 {
@@ -29,7 +30,7 @@ public class TagsAutocomplete : AutocompleteHandler
             .Where(x => x.Count > 0)
             .OrderByDescending(x => x.Count)
             .Select(x => new AutocompleteResult(x.Tag, x.Tag))
-            .Take(5);
+            .Take(25);
         return Task.FromResult(AutocompletionResult.FromSuccess(result));
     }
 

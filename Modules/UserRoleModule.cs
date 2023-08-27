@@ -1,8 +1,8 @@
 ﻿using Danbo.Apis;
 using Danbo.Errors;
 using Danbo.Models;
+using Danbo.Modules.Autocompletion;
 using Danbo.Services;
-using Danbo.TypeConverters;
 using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
@@ -15,9 +15,9 @@ using System.Threading.Tasks;
 
 namespace Danbo.Modules;
 
-[Group("role", "Manage user-assignable roles")]
+[Group("role", "Manage your user-assignable roles")]
 [RequireContext(ContextType.Guild)]
-public partial class UserRoleModule : InteractionModuleBase<SocketInteractionContext>
+public partial class UserRoleModule : ModuleBase
 {
     [SlashCommand("remove", "Remove a user-assigned role from yourself")]
     public async Task Remove(

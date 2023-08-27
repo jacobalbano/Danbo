@@ -19,5 +19,7 @@ namespace Danbo.Utility
         {
             return self.Count() > 0;
         }
+
+        public static HashSet<T> ToHashSet<T>(this ILiteQueryable<T> self) => self.ToEnumerable().ToHashSet();
     }
 }

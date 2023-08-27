@@ -1,5 +1,6 @@
 ﻿using Danbo.Apis;
 using Danbo.Errors;
+using Danbo.Modules.Parameters;
 using Danbo.Services;
 using Discord;
 using Discord.Interactions;
@@ -14,26 +15,13 @@ using System.Threading.Tasks;
 namespace Danbo.Modules;
 
 [RequireContext(ContextType.Guild)]
-public class OntopicModule : InteractionModuleBase<SocketInteractionContext>
+public class OntopicModule : ModuleBase
 {
-    public enum Unit
-    {
-        Minutes,
-        Hours,
-        Days
-    }
-
     [SlashCommand("ontopic", "Block access to offtopic channels for a given amount of time")]
-    public async Task GoOntopic(int amount, Unit unit)
+    public async Task GoOntopic(int amount, DurationUnit unit)
     {
         var defer = DeferAsync();
-        var duration = unit switch
-        {
-            Unit.Minutes => Duration.FromMinutes(amount),
-            Unit.Hours => Duration.FromHours(amount),
-            Unit.Days => Duration.FromDays(amount),
-            _ => throw new FollowupError("Invalid unit parameter")
-        };
+        var duration = unit.ToDuration(amount);
 
         await defer;
         if (duration > maxDuration)

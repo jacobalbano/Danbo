@@ -1,6 +1,6 @@
 ﻿using Danbo.Apis;
 using Danbo.Errors;
-using Danbo.TypeConverters;
+using Danbo.Modules.Autocompletion;
 using Discord;
 using Discord.Interactions;
 using System;
@@ -13,7 +13,7 @@ namespace Danbo.Modules;
 
 [Group("tags", "Display preset messages")]
 [RequireContext(ContextType.Guild)]
-public class TagsModule : InteractionModuleBase<SocketInteractionContext>
+public class TagsModule : ModuleBase
 {
 
     [SlashCommand("tag", "Display the contents of a tag", ignoreGroupNames: true)]

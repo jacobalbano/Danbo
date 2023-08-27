@@ -1,4 +1,7 @@
 ﻿using Danbo.Utility;
+using Danbo.Utility.DependencyInjection;
+using Discord;
+using Discord.WebSocket;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,5 +15,5 @@ public interface IHelpProvider
 {
     public string FeatureName { get; }
 
-    public string FeatureDescription { get; }
+    public IAsyncEnumerable<string>  FeaturesAvailable(IInteractionContext context);
 }

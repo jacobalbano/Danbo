@@ -1,4 +1,5 @@
 ﻿using Danbo.Utility;
+using Danbo.Utility.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using System;
@@ -10,24 +11,19 @@ using System.Threading.Tasks;
 
 namespace Danbo.Services
 {
-    [AutoDiscoverSingletonService]
+    [AutoDiscoverSingletonService, ForceInitialization]
     public class SchedulerService
     {
-        public SchedulerService(ILogger<SchedulerService> logger)
+        public SchedulerService(ILogger<SchedulerService> logger, IdGenerator idGen)
         {
             this.logger = logger;
+            this.idGen = idGen;
             Task.Run(Spin);
-        }
-
-        public IDisposable BeginTransaction()
-        {
-            transactions++;
-            return new Transaction(this);
         }
 
         public ulong AddJob(Instant instant, Func<Task> callback)
         {
-            var next = Interlocked.Increment(ref nextJobId);
+            var next = idGen.Next();
             if (!jobs.TryAdd(next, new Job(next, instant, callback)))
                 throw new Exception("Failed to add scheduled job");
 
@@ -57,25 +53,24 @@ namespace Danbo.Services
             while (true)
             {
                 await NextTick();
-
-                var processEvents = jobs.ToDictionary(x => x.Key, x => x.Value);
                 var now = SystemClock.Instance.GetCurrentInstant();
+                var processEvents = jobs
+                    .Where(x => x.Value.Time < now)
+                    .ToDictionary(x => x.Key, x => x.Value);
+
                 foreach (var (k, v) in processEvents)
                 {
-                    if (v.Time < now)
+                    try
                     {
-                        try
-                        {
-                            await v.Action();
-                        }
-                        catch (Exception e)
-                        {
-                            logger.LogError(e, "Error when executing scheduled job");
-                        }
-                        finally
-                        {
-                            jobs.TryRemove(k, out _);
-                        }
+                        await v.Action();
+                    }
+                    catch (Exception e)
+                    {
+                        logger.LogError(e, "Error when executing scheduled job");
+                    }
+                    finally
+                    {
+                        jobs.TryRemove(k, out _);
                     }
                 }
             }
@@ -83,19 +78,23 @@ namespace Danbo.Services
 
         private async Task NextTick()
         {
-            await Task.WhenAny(
-                signal.WaitAsync(),
-                Task.Delay(ApproachNextEvent())
-            );
-
-            if (signal.CurrentCount != 0)
-                await signal.WaitAsync();
+            try
+            {
+                var next = ApproachNextEvent();
+                logger.LogTrace("{nextTick}", next);
+                await Task.Delay(next, signal.Token);
+            }
+            catch (TaskCanceledException)
+            {
+                logger.LogTrace("Got signal, recalculating delay");
+                signal = new();
+            }
         }
 
         private void RecalculateTick()
         {
             if (transactions == 0)
-                signal.Release();
+                signal.Cancel();
         }
 
         private TimeSpan ApproachNextEvent()
@@ -111,29 +110,17 @@ namespace Danbo.Services
                 return TimeSpan.Zero;
 
             var half = (earliest.Time - now) / 2;
-            if (half < Duration.FromMinutes(1))
-                return TimeSpan.FromSeconds(5);
+            if (half < Duration.FromSeconds(1))
+                return TimeSpan.FromMilliseconds(600);
             else
                 return half.ToTimeSpan();
         }
 
-        private class Transaction : IDisposable
-        {
-            public SchedulerService Owner { get; }
-            public Transaction(SchedulerService owner) => Owner = owner;
-
-            void IDisposable.Dispose()
-            {
-                Owner.transactions--;
-                Owner.RecalculateTick();
-            }
-        }
-
         private readonly ILogger<SchedulerService> logger;
+        private readonly IdGenerator idGen;
         private readonly ConcurrentDictionary<ulong, Job> jobs = new();
-        private readonly SemaphoreSlim signal = new(0, 1);
+        private CancellationTokenSource signal = new();
 
-        private ulong nextJobId = 0;
         private byte transactions = 0;
 
         private record class Job(ulong Id, Instant Time, Func<Task> Action);

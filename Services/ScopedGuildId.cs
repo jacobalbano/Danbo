@@ -1,4 +1,5 @@
 ﻿using Danbo.Utility;
+using Danbo.Utility.DependencyInjection;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,16 +13,13 @@ public class ScopedGuildId
 {
     public ulong? Id { get; private set; }
 
-    public void Initialize(ulong? guildId)
+    public void Initialize(ulong? value)
     {
         if (initialized)
             throw new Exception("Already initialized");
         initialized = true;
-        Id = guildId;
+        Id = value;
     }
-
-    private static int count = 0;
-    public readonly int uuid = ++count;
 
     private bool initialized;
 }

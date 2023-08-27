@@ -1,4 +1,6 @@
-﻿using System;
+﻿using Danbo.TypeConverters;
+using NodaTime;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -17,6 +19,9 @@ public record class AuditEntry : ModelBase
     public ulong? DetailId { get; init; }
 
     public DetailIdType DetailType { get; init; }
+
+    [BsonConverter(typeof(NodaInstantBsonConverter))]
+    public Instant Timestamp { get; init; } = SystemClock.Instance.GetCurrentInstant();
 }
 
 public enum DetailIdType
