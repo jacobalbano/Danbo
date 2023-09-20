@@ -114,17 +114,12 @@ public class ModeratorModule : ModuleBase
     public async Task Ban(
         [Summary(description: "The user to ban")] IUser user,
         [Summary(description: "A reason for the ban")] string message = null,
-        [Summary(description: "Days of message history to delete (0-7)")] int? deleteDays = null
+        [Summary(description: "Delete recent messages?")] bool deleteMessages = false
     )
     {
         var defer = DeferAsync();
-        if (deleteDays < 0 || deleteDays > 7)
-        {
-            await defer;
-            throw new FollowupError("`deleteDays` parameter must be between 0 and 7 days");
-        }
 
-        await Context.Guild.AddBanAsync(user, deleteDays ?? 0, message);
+        await Context.Guild.AddBanAsync(user, pruneDays: deleteMessages ? 1 : 0, message);
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Ban, user.Id, message);
 
         try { await staffApi.PostToStaffLog(infraction); }
@@ -133,7 +128,8 @@ public class ModeratorModule : ModuleBase
         await defer;
         await FollowupAsync(embed: new EmbedBuilder()
             .WithAuthor(MakeAuthor(user))
-            .WithDescription("User was banned")
+            .WithTitle("User was banned")
+            .WithDescription(message ?? "No reason given")
             .WithColor(infraction.Type.ToColor())
             .Build());
         audit.Audit("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
