@@ -11,7 +11,6 @@ namespace Danbo.Utility.DependencyInjection
     [AttributeUsage(AttributeTargets.Interface, AllowMultiple = false, Inherited = true)]
     public class AutoDiscoverImplementationsAttribute : Attribute
     {
-        public bool Transient { get; init; } = true;
     }
 
     public static class AutoDiscoverImplementationsAttributeExtensions
@@ -27,10 +26,7 @@ namespace Danbo.Utility.DependencyInjection
                 {
                     var attr = iface.GetCustomAttribute<AutoDiscoverImplementationsAttribute>();
                     if (attr == null) continue;
-                    if (attr.Transient)
-                        services.AddTransient(iface, t);
-                    else
-                        services.AddScoped(iface, t);
+                    services.AddScoped(iface, t);
                 }
             }
 

@@ -9,6 +9,7 @@ using Discord.Interactions;
 using Discord.Net;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using Microsoft.VisualBasic;
 using NodaTime;
 using System.Text;
 using System.Text.Json;
@@ -29,15 +30,18 @@ public class ModeratorModule : ModuleBase
     {
         var defer = DeferAsync(ephemeral: true);
 
-        rapsheet.Add(Context.User.Id, InfractionType.Note, user.Id, message);
+        var infraction = rapsheet.Add(Context.User.Id, InfractionType.Note, user.Id, message);
         audit.Audit("Mod note added", Context.User.Id, user.Id, DetailIdType.User, message);
+
+        try { await staffApi.PostToStaffLog(infraction); }
+        catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
 
         await defer;
         await FollowupAsync(ephemeral: true, embed: new EmbedBuilder()
             .WithAuthor(MakeAuthor(user))
             .WithTitle("Note added")
             .WithDescription(message)
-            .Build());
+        .Build());
     }
 
     [SlashCommand("warn", "Publicly warn a user for an infringement")]
@@ -49,14 +53,17 @@ public class ModeratorModule : ModuleBase
     {
         var defer = DeferAsync();
 
-        rapsheet.Add(Context.User.Id, InfractionType.Warn, user.Id, message);
+        var infraction = rapsheet.Add(Context.User.Id, InfractionType.Warn, user.Id, message);
         audit.Audit("User warned", Context.User.Id, user.Id, DetailIdType.User, message);
+
+        try { await staffApi.PostToStaffLog(infraction); }
+        catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
 
         var embed = new EmbedBuilder()
             .WithAuthor(MakeAuthor(user))
             .WithTitle("You have been warned")
             .WithDescription(message)
-            .WithColor(Color.LightOrange);
+            .WithColor(infraction.Type.ToColor());
 
         try
         {
@@ -86,13 +93,16 @@ public class ModeratorModule : ModuleBase
         try { await user.SetTimeOutAsync(duration.ToTimeSpan()); }
         catch (Exception) { throw new FollowupError("Error timing user out"); }
 
-        rapsheet.Add(Context.User.Id, InfractionType.Timeout, user.Id, message);
+        var infraction = rapsheet.Add(Context.User.Id, InfractionType.Timeout, user.Id, message);
         audit.Audit("User timed out", Context.User.Id, user.Id, DetailIdType.User, message);
+
+        try { await staffApi.PostToStaffLog(infraction); }
+        catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
 
         var embed = new EmbedBuilder()
             .WithAuthor(MakeAuthor(user))
             .WithTitle($"You have been timed out until  <t:{until.ToUnixTimeSeconds()}:f>")
-            .WithColor(Color.LightOrange)
+            .WithColor(infraction.Type.ToColor())
             .WithDescription(message);
 
         await defer;
@@ -115,13 +125,16 @@ public class ModeratorModule : ModuleBase
         }
 
         await Context.Guild.AddBanAsync(user, deleteDays ?? 0, message);
-        rapsheet.Add(Context.User.Id, InfractionType.Ban, user.Id, message);
+        var infraction = rapsheet.Add(Context.User.Id, InfractionType.Ban, user.Id, message);
+
+        try { await staffApi.PostToStaffLog(infraction); }
+        catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
 
         await defer;
         await FollowupAsync(embed: new EmbedBuilder()
             .WithAuthor(MakeAuthor(user))
             .WithDescription("User was banned")
-            .WithColor(Color.DarkRed)
+            .WithColor(infraction.Type.ToColor())
             .Build());
         audit.Audit("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
     }
@@ -222,10 +235,12 @@ public class ModeratorModule : ModuleBase
         );
     }
 
-    public ModeratorModule(RapsheetApi rapsheet, AuditApi audit)
+    public ModeratorModule(RapsheetApi rapsheet, AuditApi audit, StaffApi staffApi, ILogger<ModeratorModule> logger)
     {
         this.rapsheet = rapsheet;
         this.audit = audit;
+        this.staffApi = staffApi;
+        this.logger = logger;
     }
 
     private async Task ShowRapsheetTable(IEnumerable<string> messages)
@@ -294,6 +309,8 @@ public class ModeratorModule : ModuleBase
 
     private readonly RapsheetApi rapsheet;
     private readonly AuditApi audit;
+    private readonly StaffApi staffApi;
+    private readonly ILogger<ModeratorModule> logger;
 
     private static EmbedAuthorBuilder MakeAuthor(IUser user) => new EmbedAuthorBuilder()
         .WithName(user.Username)

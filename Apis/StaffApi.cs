@@ -7,6 +7,7 @@ using Discord;
 using Discord.Net.Udp;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
+using NodaTime;
 using NodaTime.Extensions;
 using System;
 using System.Collections.Generic;
@@ -33,6 +34,29 @@ public class StaffApi
 
         using var s = db.BeginSession();
         s.InsertOrUpdate(config);
+    }
+
+    public async Task PostToStaffLog(Infraction infraction)
+    {
+        var channelId = db
+            .Select<StaffChannelConfig>()
+            .FirstOrDefault()
+            ?.StaffLogChannelId
+            ?? throw new NullReferenceException(nameof(StaffChannelConfig.StaffLogChannelId));
+
+        if (await discord.GetChannelAsync(channelId) is not ITextChannel staffLogChannel)
+            throw new Exception("Error accessing staff log channel");
+
+        var builder = new EmbedBuilder()
+            .WithTitle(infraction.Type.ToString())
+            .WithDescription(infraction.Message ?? "No message")
+            .WithColor(infraction.Type.ToColor())
+            .AddField("Moderator", MentionUtils.MentionUser(infraction.ModeratorId))
+            .AddField("User", MentionUtils.MentionUser(infraction.UserId));
+        if (infraction.Type == InfractionType.Timeout && infraction.Duration is Duration duration)
+            builder.AddField("Duration", duration.ToString());
+
+        await staffLogChannel.SendMessageAsync(embed: builder.Build());
     }
 
     public async Task<StaffLogExport> ExportStaffLog()

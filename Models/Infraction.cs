@@ -1,4 +1,5 @@
 ﻿using Danbo.TypeConverters;
+using Discord;
 using NodaTime;
 using System;
 using System.Collections.Generic;
@@ -46,5 +47,14 @@ public static class InfractionExtensions
         InfractionType.Timeout => "🛑",
         InfractionType.Ban => "🔨",
         _ => "❔"
+    };
+
+    public static Color ToColor(this InfractionType type) => type switch
+    {
+        InfractionType.Note => Color.Default,
+        InfractionType.Warn => new Color(250, 219, 94),
+        InfractionType.Timeout => Color.Orange,
+        InfractionType.Ban => Color.Red,
+        _ => Color.Default
     };
 }
