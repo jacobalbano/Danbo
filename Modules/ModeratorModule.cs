@@ -113,7 +113,7 @@ public class ModeratorModule : ModuleBase
     [RequireUserPermission(GuildPermission.BanMembers), DefaultMemberPermissions(GuildPermission.BanMembers)]
     public async Task Ban(
         [Summary(description: "The user to ban")] IUser user,
-        [Summary(description: "A reason for the ban")] string message = null,
+        [Summary(description: "A reason for the ban")] string message,
         [Summary(description: "Delete recent messages?")] bool deleteMessages = false
     )
     {
