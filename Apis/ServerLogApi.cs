@@ -43,7 +43,7 @@ internal class ServerLogApi
 
         var builder = new EmbedBuilder()
             .AddField("Old", work.CachedContent.NullIfEmpty() ?? "`not available in cache`")
-            .WithTitle($"Message {work.Type.ToString().ToLower()} in {channel.Mention}");
+            .WithTitle($"Message {work.Type.ToString().ToLower()} in {work.Channel.Mention}");
 
         switch (work.Type)
         {

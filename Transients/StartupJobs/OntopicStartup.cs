@@ -2,6 +2,7 @@
 using Danbo.Models.Jobs;
 using Danbo.Services;
 using Discord;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,21 +19,33 @@ public class OntopicStartup : IStartupJob
         foreach (var job in s.Select<OntopicExpirationJob>().ToEnumerable())
         {
             scheduler.RemoveJob(job.JobHandle);
-            var handle = scheduler.AddJob(job.Expiration, async () => await ontopicApi.RemoveOntopicFromUser(await guild.GetUserAsync(job.UserId)));
+            var handle = scheduler.AddJob(job.Expiration, async () => {
+                await guild.DownloadUsersAsync();
+                var user = await guild.GetUserAsync(job.UserId);
+                if (user == null)
+                {
+                    logger.LogWarning("Cannot remove ontopic from nonexistent member {userId}", job.UserId);
+                    return;
+                }
+                
+                await ontopicApi.RemoveOntopicFromUser(user);
+            });
             s.Update(job with { JobHandle = handle });
         }
 
         return Task.CompletedTask;
     }
 
-    public OntopicStartup(Database db, OntopicApi ontopicApi, SchedulerService scheduler)
+    public OntopicStartup(Database db, OntopicApi ontopicApi, SchedulerService scheduler, ILogger<OntopicStartup> logger)
     {
         this.db = db;
         this.ontopicApi = ontopicApi;
         this.scheduler = scheduler;
+        this.logger = logger;
     }
 
     private readonly Database db;
     private readonly OntopicApi ontopicApi;
     private readonly SchedulerService scheduler;
+    private readonly ILogger<OntopicStartup> logger;
 }

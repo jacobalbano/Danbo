@@ -27,6 +27,8 @@ public class OntopicApi
     {
         if (GetOntopicRoleId() is not ulong roleId)
             throw new FollowupError("Ontopic is not configured.");
+        if (user == null)
+            throw new NullReferenceException(nameof(user));
 
         await user.RemoveRoleAsync(roleId, new RequestOptions { AuditLogReason = "Role expired" });
         using var s = database.BeginSession();
