@@ -127,6 +127,8 @@ public class HelpModule : ModuleBase
             public bool IsStreaming => user.IsStreaming;
             public bool IsVideoing => user.IsVideoing;
             public DateTimeOffset? RequestToSpeakTimestamp => user.RequestToSpeakTimestamp;
+            public string AvatarDecorationHash => user.AvatarDecorationHash;
+            public ulong? AvatarDecorationSkuId => user.AvatarDecorationSkuId;
             public ChannelPermissions GetPermissions(IGuildChannel channel) => ChannelPermissions.None;
             public string GetGuildAvatarUrl(ImageFormat format = ImageFormat.Auto, ushort size = 128) => user.GetGuildAvatarUrl(format, size);
             public string GetDisplayAvatarUrl(ImageFormat format = ImageFormat.Auto, ushort size = 128) => user.GetDisplayAvatarUrl(format, size);
@@ -145,6 +147,11 @@ public class HelpModule : ModuleBase
             public string GetAvatarUrl(ImageFormat format = ImageFormat.Auto, ushort size = 128) => user.GetAvatarUrl(format, size);
             public string GetDefaultAvatarUrl() => user.GetDefaultAvatarUrl();
             public Task<IDMChannel> CreateDMChannelAsync(RequestOptions options = null) => user.CreateDMChannelAsync(options);
+
+            public string GetAvatarDecorationUrl()
+            {
+                throw new NotImplementedException();
+            }
         }
 
         private class UnprivelegedInteraction : IDiscordInteraction
@@ -169,6 +176,10 @@ public class HelpModule : ModuleBase
             public ulong? GuildId => interaction.GuildId;
             public ulong ApplicationId => interaction.ApplicationId;
             public DateTimeOffset CreatedAt => interaction.CreatedAt;
+            public IReadOnlyCollection<IEntitlement> Entitlements => interaction.Entitlements;
+            public IReadOnlyDictionary<ApplicationIntegrationType, ulong> IntegrationOwners => interaction.IntegrationOwners;
+            public InteractionContextType? ContextType => interaction.ContextType;
+            public GuildPermissions Permissions => interaction.Permissions;
             public Task DeferAsync(bool ephemeral = false, RequestOptions options = null) => interaction.DeferAsync(ephemeral, options);
             public Task DeleteOriginalResponseAsync(RequestOptions options = null) => interaction.DeleteOriginalResponseAsync(options);
             public Task<IUserMessage> FollowupAsync(string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null) => interaction.FollowupAsync(text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options);
@@ -178,6 +189,8 @@ public class HelpModule : ModuleBase
             public Task RespondAsync(string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null) => interaction.RespondAsync(text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options);
             public Task RespondWithFilesAsync(IEnumerable<FileAttachment> attachments, string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null) => interaction.RespondWithFilesAsync(attachments, text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options);
             public Task RespondWithModalAsync(Modal modal, RequestOptions options = null) => interaction.RespondWithModalAsync(modal, options);
+            public Task RespondWithPremiumRequiredAsync(RequestOptions options = null) => interaction.RespondWithPremiumRequiredAsync(options);
+
             private IDiscordInteraction interaction;
         }
     }

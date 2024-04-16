@@ -7,12 +7,16 @@ using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
 using Discord.Net;
+using Discord.Rest;
 using Discord.WebSocket;
+using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualBasic;
 using NodaTime;
 using System.Text;
 using System.Text.Json;
+using System.Threading.Channels;
+using System.Xml.Linq;
 
 namespace Danbo.Modules;
 
@@ -126,13 +130,99 @@ public class ModeratorModule : ModuleBase
         catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
 
         await defer;
-        await FollowupAsync(embed: new EmbedBuilder()
+
+        var embed = new EmbedBuilder()
             .WithAuthor(MakeAuthor(user))
             .WithTitle("User was banned")
             .WithDescription(message ?? "No reason given")
             .WithColor(infraction.Type.ToColor())
-            .Build());
+            .Build();
+
+        await FollowupAsync(embed: embed);
         audit.Audit("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
+
+        /* TODO: finish implementing this
+        if (!deleteMessages)
+        {
+            using var awaiter = new InteractionAwaiter(Context);
+            var confirm = awaiter.Signal();
+            var cancel = awaiter.Signal();
+
+            var components = new ComponentBuilder()
+                .WithButton("Purge recent messages", confirm.InteractionId, ButtonStyle.Danger)
+                .WithButton("Cancel", cancel.InteractionId, ButtonStyle.Secondary);
+
+            await ModifyOriginalResponseAsync(x => x.Components = components.Build());
+
+            while (awaiter.IsValid)
+            {
+                var signal = await awaiter.WaitForSignal();
+                if (signal.Interaction is not SocketMessageComponent component)
+                    continue;
+
+                if (signal == cancel)
+                {
+                    await component.UpdateAsync(x => (x.Embed, x.Components) = (embed, new ComponentBuilder().Build()));
+                    return;
+                }
+
+                if (signal != confirm) continue;
+
+                var results = new List<IMessage>();
+                var textChannels = Context.Guild.Channels
+                    .Select(x => (ITextChannel)x)
+                    .Where(x => x != null);
+
+                foreach (var chan in textChannels)
+                {
+                    var messages = (await chan.GetMessagesAsync()
+                        .FlattenAsync())
+                        .Where(x => x.Author == user)
+                        .ToList();
+                    await chan.DeleteMessagesAsync(messages, new() { AuditLogReason = "Cleanup after ban" });
+                }
+
+                var oldRecord = rapsheet.Remove(user.Id, key);
+                if (oldRecord != null)
+                {
+                    audit.Audit("Removed infraction", Context.User.Id, detailId: user.Id, detailIdType: DetailIdType.User, detailMessage: oldRecord.Message);
+                    await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Infraction removed"));
+                }
+                else
+                {
+                    await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Error removing infraction"));
+                }
+
+                break;
+            }
+        }
+        */
+    }
+
+
+    [SlashCommand("unban", "Unban a user")]
+    [RequireUserPermission(GuildPermission.BanMembers), DefaultMemberPermissions(GuildPermission.BanMembers)]
+    public async Task Unban(
+        [Summary(description: "The user to unban")] IUser user,
+        [Summary(description: "A reason for the unban")] string message
+    )
+    {
+        var defer = DeferAsync();
+
+        await Context.Guild.RemoveBanAsync(user);
+        var infraction = rapsheet.Add(Context.User.Id, InfractionType.Note, user.Id, message);
+
+        try { await staffApi.PostToStaffLog(infraction); }
+        catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
+
+        await defer;
+        await FollowupAsync(embed: new EmbedBuilder()
+            .WithAuthor(MakeAuthor(user))
+            .WithTitle("User was unbanned")
+            .WithDescription(message ?? "No reason given")
+            .WithColor(infraction.Type.ToColor())
+            .Build());
+        audit.Audit("User unbanned", Context.User.Id, user.Id, DetailIdType.User, message);
     }
 
     [SlashCommand("rapsheet", "Display's a user's record")]
@@ -203,7 +293,6 @@ public class ModeratorModule : ModuleBase
             if (signal.Interaction is not SocketMessageComponent component)
                 continue;
 
-            await component.DeferAsync();
             if (signal == cancel)
             {
                 await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Cancelled"));

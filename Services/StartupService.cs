@@ -40,9 +40,7 @@ public class StartupService
     {
         foreach (var guild in discord.Guilds)
         {
-            using var scope = services.CreateScope();
-            scope.ServiceProvider.GetRequiredService<ScopedGuildId>()
-                .Initialize(guild.Id);
+            using var scope = services.GuildScope(guild.Id);
 
             foreach (var init in scope.ServiceProvider.GetServices<IStartupJob>())
                 await init.Run(guild);

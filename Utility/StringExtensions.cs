@@ -31,4 +31,6 @@ public static class StringExtensions
         if (!string.IsNullOrEmpty(nextLine))
             yield return nextLine;
     }
+
+    public static string NullIfEmpty(this string str) => string.IsNullOrEmpty(str) ? null : str;
 }

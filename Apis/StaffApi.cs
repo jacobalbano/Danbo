@@ -29,6 +29,7 @@ public class StaffApi
         config = configProperty switch
         {
             nameof(StaffChannelConfig.StaffLogChannelId) => config with { StaffLogChannelId = channelId },
+            nameof(StaffChannelConfig.ServerLogChannelId) => config with { ServerLogChannelId = channelId },
             _ => throw new Exception($"Unhandled property {configProperty}"),
         };
 

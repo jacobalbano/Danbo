@@ -46,7 +46,7 @@ public class RapsheetApi
             .ToEnumerable();
     }
 
-    public Infraction? Remove(ulong userId, Guid infractionKey)
+    public Infraction Remove(ulong userId, Guid infractionKey)
     {
         using var s = db.BeginSession();
         var toDelete = s.Select<Infraction>()

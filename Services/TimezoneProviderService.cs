@@ -75,7 +75,6 @@ public class TimezoneProviderService
         {
             scheduler.AddJob(SystemClock.Instance.GetCurrentInstant() + Duration.FromHours(12), CheckForTimezones);
         }
-
     }
 
     private static void EnsureDirectorySanity()

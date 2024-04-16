@@ -60,10 +60,8 @@ public class CommandHandlerService
     private async Task InteractionCreated(SocketInteraction arg)
     {
         var ctx = new SocketInteractionContext(discord, arg);
-        var scope = services.CreateScope();
+        var scope = services.GuildScope(arg.GuildId.Value);
         needCleanup.TryAdd(arg.Id, scope);
-        scope.ServiceProvider.GetRequiredService<ScopedGuildId>()
-            .Initialize(arg.GuildId);
 
         await commands.ExecuteCommandAsync(ctx, scope.ServiceProvider);
     }
@@ -82,10 +80,7 @@ public class CommandHandlerService
                 .WithDescription(result.ErrorReason)
                 .Build());
 
-            using var scope = services.CreateScope();
-            scope.ServiceProvider.GetRequiredService<ScopedGuildId>()
-                .Initialize(arg2.Guild.Id);
-
+            using var scope = services.GuildScope(arg2.Guild.Id);
             scope.ServiceProvider.GetRequiredService<AuditApi>()
                 .Audit("Attempted to run a privileged command", arg2.User.Id, detailMessage: arg1.Name);
         }

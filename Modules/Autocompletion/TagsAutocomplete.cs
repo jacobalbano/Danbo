@@ -17,9 +17,7 @@ public class TagsAutocomplete : AutocompleteHandler
 {
     public override Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)
     {
-        using var scope = services.CreateScope();
-        scope.ServiceProvider.GetRequiredService<ScopedGuildId>()
-            .Initialize(context.Guild.Id);
+        using var scope = services.GuildScope(context.Guild.Id);
 
         var tagsApi = scope.ServiceProvider.GetRequiredService<TagsApi>();
         var search = (autocompleteInteraction.Data.Current.Value as string ?? string.Empty)

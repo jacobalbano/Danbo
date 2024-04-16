@@ -29,15 +29,35 @@ public class Program
     static async Task RunAsync()
     {
         using var services = ConfigureServices();
-
         var client = services.GetRequiredService<DiscordSocketClient>();
         var handler = services.GetRequiredService<CommandHandlerService>();
+        var logger = services.GetRequiredService<ILogger<Program>>();
 
         await handler.Initialize();
-        await client.LoginAsync(TokenType.Bot, BotConfig.Token);
-        await client.StartAsync();
 
-        await Task.Delay(Timeout.Infinite);
+        while (true)
+        {
+            var tcs = new TaskCompletionSource();
+            await client.LoginAsync(TokenType.Bot, BotConfig.Token);
+            await client.StartAsync();
+
+            client.Disconnected += cancelAndReconnect;
+
+            await tcs.Task;
+            logger.LogWarning("Bot disconnected, attempting to restart");
+            await Task.Delay(5000);
+
+            Task cancelAndReconnect(Exception ex)
+            {
+                logger.LogInformation("Disconnect handler");
+                if (ex is TaskCanceledException)
+                {
+                    tcs.SetResult();
+                    client.Disconnected -= cancelAndReconnect;
+                }
+                return Task.CompletedTask;
+            }
+        }
     }
 
     static ServiceProvider ConfigureServices() => new ServiceCollection()
@@ -47,6 +67,7 @@ public class Program
         .AddSingleton<DiscordSocketClient>()
         .AddSingleton(new DiscordSocketConfig {
             LogGatewayIntentWarnings = false,
+            MessageCacheSize = 4096,
             GatewayIntents = GatewayIntents.AllUnprivileged | GatewayIntents.GuildMembers | GatewayIntents.MessageContent | GatewayIntents.GuildScheduledEvents,
 #if DEBUG
             LogLevel = LogSeverity.Debug
