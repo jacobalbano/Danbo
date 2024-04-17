@@ -34,12 +34,12 @@ public class ManagementModule : ModuleBase
             if (userRoles.GetUserRoles().Contains(role.Id))
             {
                 userRoles.DisableUserRole(role.Id);
-                audit.Audit("Removed user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
+                audit.Log("Removed user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
                 return "Role has been removed";
             }
             else
             {
-                audit.Audit("Added user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
+                audit.Log("Added user-assignable role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
                 userRoles.EnableUserRole(role.Id);
                 return "Role has been added";
             }
@@ -56,12 +56,12 @@ public class ManagementModule : ModuleBase
             if (role == null)
             {
                 var message = "Disabled Ontopic role";
-                audit.Audit(message, userId: Context.User.Id);
+                audit.Log(message, userId: Context.User.Id);
                 return message;
             }
             else
             {
-                audit.Audit("Set Ontopic role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
+                audit.Log("Set Ontopic role", userId: Context.User.Id, detailId: role.Id, detailIdType: DetailIdType.Role);
                 return $"Ontopic role set to {MentionUtils.MentionRole(role.Id)}";
             }
         });
@@ -81,12 +81,12 @@ public class ManagementModule : ModuleBase
             if (channel == null)
             {
                 var message = $"Removed StaffChannel property {property}";
-                audit.Audit(message, userId: Context.User.Id);
+                audit.Log(message, userId: Context.User.Id);
                 return message;
             }
             else
             {
-                audit.Audit("Set staff channel ID", userId: Context.User.Id, detailId: channel.Id, detailIdType: DetailIdType.Channel, detailMessage: property);
+                audit.Log("Set staff channel ID", userId: Context.User.Id, detailId: channel.Id, detailIdType: DetailIdType.Channel, detailMessage: property);
                 return $"StaffChannel property {property} set to {MentionUtils.MentionChannel(channel.Id)}";
             }
         });
@@ -106,14 +106,13 @@ public class ManagementModule : ModuleBase
             .AddTextInput("Tag content", "content", TextInputStyle.Paragraph, required: false, value: tagContent)
             .Build());
 
-        while (awaiter.IsValid)
+        await awaiter.HandleInteractionsAsync(async signal =>
         {
-            var signal = await awaiter.WaitForSignal();
             if (signal != modalSignal)
-                continue;
+                return;
 
             if (signal.Interaction is not SocketModal result)
-                continue;
+                return;
 
             var defer = result.DeferAsync();
             var content = result.Data.Components
@@ -126,15 +125,15 @@ public class ManagementModule : ModuleBase
                 ? "Tag removed"
                 : "Tag saved";
 
-            audit.Audit(message, userId: Context.User.Id, detailMessage: tagContent);
+            audit.Log(message, userId: Context.User.Id, detailMessage: tagContent);
 
             await defer;
             await result.FollowupAsync(ephemeral: true, embed: new EmbedBuilder()
                 .WithDescription(message)
                 .Build());
 
-            return;
-        }
+            awaiter.Stop();
+        });
     }
 
     public ManagementModule(OntopicApi ontopic, TagsApi tags, UserRoleApi userRoles, AuditApi audit, StaffApi staffApi)

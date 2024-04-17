@@ -21,8 +21,6 @@ public interface IInteractionSignal
 
 public class InteractionAwaiter : IDisposable
 {
-    public bool IsValid => !disposed && !timedout && context.Interaction.IsValidToken;
-
     public InteractionAwaiter(SocketInteractionContext context)
     {
         this.context = context;
@@ -32,16 +30,24 @@ public class InteractionAwaiter : IDisposable
         Task.Run(Timeout, timeoutTokenSource.Token);
     }
 
-    public Task<IInteractionSignal> WaitForSignal() => tcs.Task;
+    public async Task HandleInteractionsAsync(Func<IInteractionSignal, Task> handler)
+    {
+        try
+        {
+            while (active)
+            {
+                var signal = await tcs.Task;
+                await handler(signal);
+            }
+        }
+        catch (TaskCanceledException) { }
+        catch { throw; }
+    }
 
     public void Dispose()
     {
         if (disposed) throw new ObjectDisposedException(nameof(InteractionAwaiter));
-        context.Client.ModalSubmitted -= Client_ModalSubmitted;
-        context.Client.ButtonExecuted -= Client_ComponentExecuted;
-        context.Client.SelectMenuExecuted -= Client_ComponentExecuted;
-        timeoutTokenSource.Cancel();
-        signals.Clear();
+        Stop();
         disposed = true;
     }
 
@@ -50,6 +56,21 @@ public class InteractionAwaiter : IDisposable
         var result = new SignalImpl { InteractionId = Guid.NewGuid().ToString() };
         signals[result.InteractionId] = result;
         return result;
+    }
+
+    /// <summary>
+    /// Call to manually stop listening for interactions.
+    /// Also called automatically by <see cref="Dispose"/>
+    /// </summary>
+    public void Stop()
+    {
+        context.Client.ModalSubmitted -= Client_ModalSubmitted;
+        context.Client.ButtonExecuted -= Client_ComponentExecuted;
+        context.Client.SelectMenuExecuted -= Client_ComponentExecuted;
+        timeoutTokenSource.Cancel();
+        tcs.SetCanceled();
+        signals.Clear();
+        active = false;
     }
 
     private Task Client_ComponentExecuted(SocketMessageComponent arg) => TrySignal(arg, arg.Data.CustomId);
@@ -69,16 +90,14 @@ public class InteractionAwaiter : IDisposable
     private async Task Timeout()
     {
         await Task.Delay(TimeSpan.FromMinutes(15));
-        tcs.SetCanceled();
-        signals.Clear();
-        timedout = true;
+        Stop();
     }
 
     private TaskCompletionSource<IInteractionSignal> tcs = new();
     private readonly CancellationTokenSource timeoutTokenSource = new();
     private readonly Dictionary<string, SignalImpl> signals = new();
     private readonly SocketInteractionContext context;
-    private bool disposed, timedout;
+    private bool disposed, active = true;
 
     private class SignalImpl : IInteractionSignal
     {

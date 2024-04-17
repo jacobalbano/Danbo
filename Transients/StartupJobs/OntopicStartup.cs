@@ -25,6 +25,7 @@ public class OntopicStartup : IStartupJob
                 if (user == null)
                 {
                     logger.LogWarning("Cannot remove ontopic from nonexistent member {userId}", job.UserId);
+                    ontopicApi.RemoveOntopicExpiration(job.UserId);
                     return;
                 }
                 

@@ -13,6 +13,8 @@ using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Logging;
 using Microsoft.VisualBasic;
 using NodaTime;
+using NodaTime.Extensions;
+using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -35,7 +37,7 @@ public class ModeratorModule : ModuleBase
         var defer = DeferAsync(ephemeral: true);
 
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Note, user.Id, message);
-        audit.Audit("Mod note added", Context.User.Id, user.Id, DetailIdType.User, message);
+        audit.Log("Mod note added", Context.User.Id, user.Id, DetailIdType.User, message);
 
         try { await staffApi.PostToStaffLog(infraction); }
         catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
@@ -58,7 +60,7 @@ public class ModeratorModule : ModuleBase
         var defer = DeferAsync();
 
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Warn, user.Id, message);
-        audit.Audit("User warned", Context.User.Id, user.Id, DetailIdType.User, message);
+        audit.Log("User warned", Context.User.Id, user.Id, DetailIdType.User, message);
 
         try { await staffApi.PostToStaffLog(infraction); }
         catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
@@ -98,7 +100,7 @@ public class ModeratorModule : ModuleBase
         catch (Exception) { throw new FollowupError("Error timing user out"); }
 
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Timeout, user.Id, message);
-        audit.Audit("User timed out", Context.User.Id, user.Id, DetailIdType.User, message);
+        audit.Log("User timed out", Context.User.Id, user.Id, DetailIdType.User, message);
 
         try { await staffApi.PostToStaffLog(infraction); }
         catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
@@ -138,10 +140,9 @@ public class ModeratorModule : ModuleBase
             .WithColor(infraction.Type.ToColor())
             .Build();
 
-        await FollowupAsync(embed: embed);
-        audit.Audit("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
+        var followup = await FollowupAsync(embed: embed);
+        audit.Log("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
 
-        /* TODO: finish implementing this
         if (!deleteMessages)
         {
             using var awaiter = new InteractionAwaiter(Context);
@@ -154,49 +155,48 @@ public class ModeratorModule : ModuleBase
 
             await ModifyOriginalResponseAsync(x => x.Components = components.Build());
 
-            while (awaiter.IsValid)
+            await awaiter.HandleInteractionsAsync(async signal =>
             {
-                var signal = await awaiter.WaitForSignal();
                 if (signal.Interaction is not SocketMessageComponent component)
-                    continue;
-
-                if (signal == cancel)
-                {
-                    await component.UpdateAsync(x => (x.Embed, x.Components) = (embed, new ComponentBuilder().Build()));
                     return;
-                }
 
-                if (signal != confirm) continue;
+                if (signal == cancel) awaiter.Stop();
+                if (signal != confirm) return;
+
+                await component.UpdateAsync(x => x.Components = new ComponentBuilder()
+                    .WithButton("Purge in progress", confirm.InteractionId, ButtonStyle.Danger, disabled: true)
+                    .WithButton("Cancel", cancel.InteractionId, ButtonStyle.Secondary, disabled: true)
+                    .Build());
 
                 var results = new List<IMessage>();
                 var textChannels = Context.Guild.Channels
-                    .Select(x => (ITextChannel)x)
-                    .Where(x => x != null);
+                    .Select(x => x as ITextChannel)
+                    .Where(x => x != null)
+                    .ToList();
 
+                var threshold = SystemClock.Instance.GetCurrentInstant() - Duration.FromMinutes(30);
+                int messageCount = 0, channelCount = 0;
                 foreach (var chan in textChannels)
                 {
                     var messages = (await chan.GetMessagesAsync()
                         .FlattenAsync())
                         .Where(x => x.Author == user)
+                        .Where(x => x.Timestamp.ToInstant() >= threshold)
                         .ToList();
-                    await chan.DeleteMessagesAsync(messages, new() { AuditLogReason = "Cleanup after ban" });
+                    if (!messages.Any()) continue;
+
+                    await chan.DeleteMessagesAsync(messages);
+                    messageCount += messages.Count;
+                    channelCount++;
                 }
 
-                var oldRecord = rapsheet.Remove(user.Id, key);
-                if (oldRecord != null)
-                {
-                    audit.Audit("Removed infraction", Context.User.Id, detailId: user.Id, detailIdType: DetailIdType.User, detailMessage: oldRecord.Message);
-                    await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Infraction removed"));
-                }
-                else
-                {
-                    await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Error removing infraction"));
-                }
+                await defer;
+                audit.Log("Bulk delete after ban", Context.User.Id, detailId: user.Id, DetailIdType.User, (messageCount, channelCount));
+                awaiter.Stop();
+            });
 
-                break;
-            }
+            await followup.ModifyAsync(x => x.Components = new ComponentBuilder().Build());
         }
-        */
     }
 
 
@@ -222,7 +222,7 @@ public class ModeratorModule : ModuleBase
             .WithDescription(message ?? "No reason given")
             .WithColor(infraction.Type.ToColor())
             .Build());
-        audit.Audit("User unbanned", Context.User.Id, user.Id, DetailIdType.User, message);
+        audit.Log("User unbanned", Context.User.Id, user.Id, DetailIdType.User, message);
     }
 
     [SlashCommand("rapsheet", "Display's a user's record")]
@@ -232,7 +232,7 @@ public class ModeratorModule : ModuleBase
     )
     {
         var defer = DeferAsync();
-        audit.Audit("Rapsheet viewed", Context.User.Id, user.Id, DetailIdType.User);
+        audit.Log("Rapsheet viewed", Context.User.Id, user.Id, DetailIdType.User);
         var messages = rapsheet.GetInfractionsForUser(user)
             .OrderByDescending(x => x.InfractionInstant)
             .Select(x => $"{x.Type.ToEmoji()} by {MentionUtils.MentionUser(x.ModeratorId)} (<t:{x.InfractionInstant.ToUnixTimeSeconds()}:d>) - {x.Message}");
@@ -249,7 +249,7 @@ public class ModeratorModule : ModuleBase
     )
     {
         var defer = DeferAsync();
-        audit.Audit("Rapsheet searched", Context.User.Id, detailObject: (infractionType, keyword));
+        audit.Log("Rapsheet searched", Context.User.Id, detailObject: (infractionType, keyword));
         var messages = rapsheet.SearchInfractions(infractionType, keyword)
             .OrderByDescending(x => x.InfractionInstant)
             .Select(x => $"{x.Type.ToEmoji()} by {MentionUtils.MentionUser(x.ModeratorId)} (<t:{x.InfractionInstant.ToUnixTimeSeconds()}:d> ) {MentionUtils.MentionUser(x.UserId)} -  {x.Message}");
@@ -285,25 +285,24 @@ public class ModeratorModule : ModuleBase
             .WithButton("Cancel", cancel.InteractionId, ButtonStyle.Secondary);
 
         await defer;
-        await FollowupAsync(embed: embed.Build(), components: components.Build());
+        var followup = await FollowupAsync(embed: embed.Build(), components: components.Build());
 
-        while (awaiter.IsValid)
+        await awaiter.HandleInteractionsAsync(async signal =>
         {
-            var signal = await awaiter.WaitForSignal();
             if (signal.Interaction is not SocketMessageComponent component)
-                continue;
+                return;
 
             if (signal == cancel)
             {
                 await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Cancelled"));
-                return;
+                awaiter.Stop();
             }
 
-            if (signal != confirm) continue;
+            if (signal != confirm) return;
             var oldRecord = rapsheet.Remove(user.Id, key);
             if (oldRecord != null)
             {
-                audit.Audit("Removed infraction", Context.User.Id, detailId: user.Id, detailIdType: DetailIdType.User, detailMessage: oldRecord.Message);
+                audit.Log("Removed infraction", Context.User.Id, detailId: user.Id, detailIdType: DetailIdType.User, detailMessage: oldRecord.Message);
                 await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Infraction removed"));
             }
             else
@@ -311,8 +310,10 @@ public class ModeratorModule : ModuleBase
                 await component.UpdateAsync(x => (x.Embed, x.Components) = Clear("Error removing infraction"));
             }
 
-            break;
-        }
+            awaiter.Stop();
+        });
+
+        await followup.ModifyAsync(x => x.Components = new ComponentBuilder().Build());
 
         static (Embed, MessageComponent) Clear(string message) => (
             new EmbedBuilder().WithDescription(message).Build(),
@@ -339,22 +340,23 @@ public class ModeratorModule : ModuleBase
         var build = () => BuildRapsheet(messages, page, firstSignal, prevSignal, nextSignal, lastSignal);
 
         var (embed, components) = build();
-        await FollowupAsync(embed: embed, components: components);
+        var followup = await FollowupAsync(embed: embed, components: components);
 
-        while (handler.IsValid)
+        await handler.HandleInteractionsAsync(async signal =>
         {
-            var button = await handler.WaitForSignal();
-            if (button.Interaction is not SocketMessageComponent component)
-                continue;
+            if (signal.Interaction is not SocketMessageComponent component)
+                return;
 
-            if (button == firstSignal) page = 0;
-            else if (button == prevSignal) page--;
-            else if (button == nextSignal) page++;
-            else if (button == lastSignal) page = (messages.Count() / 5) - 1;
-            else continue;
-            
+            if (signal == firstSignal) page = 0;
+            else if (signal == prevSignal) page--;
+            else if (signal == nextSignal) page++;
+            else if (signal == lastSignal) page = (messages.Count() / 5) - 1;
+            else return;
+
             await component.UpdateAsync(x => (x.Embed, x.Components) = build());
-        }
+        });
+
+        await followup.ModifyAsync(x => x.Components = new ComponentBuilder().Build());
 
         static (Embed, MessageComponent) BuildRapsheet(IEnumerable<string> infractions, int page, IInteractionSignal firstSignal, IInteractionSignal prevSignal, IInteractionSignal nextSignal, IInteractionSignal lastSignal)
         {

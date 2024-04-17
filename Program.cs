@@ -11,6 +11,7 @@ using Danbo.Models;
 using Danbo.Services;
 using IdGen;
 using Danbo.Utility.DependencyInjection;
+using Serilog.Configuration;
 
 namespace Danbo;
 
@@ -49,11 +50,11 @@ public class Program
 
             Task cancelAndReconnect(Exception ex)
             {
-                logger.LogInformation("Disconnect handler");
                 if (ex is TaskCanceledException)
                 {
                     tcs.SetResult();
                     client.Disconnected -= cancelAndReconnect;
+                    logger.LogInformation("Disconnect handler");
                 }
                 return Task.CompletedTask;
             }
@@ -83,6 +84,9 @@ public class Program
         .DiscoverAndInitialize();
 
     private static ILoggingBuilder ConfigureLogging(ILoggingBuilder x) => x.AddSerilog(new LoggerConfiguration()
+#if DEBUG
+        .MinimumLevel.Is(Serilog.Events.LogEventLevel.Debug)
+#endif
         .WriteTo.File("logs/danbo.log",
             rollingInterval: RollingInterval.Day,
             retainedFileCountLimit: null,

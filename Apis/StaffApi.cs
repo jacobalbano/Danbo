@@ -39,12 +39,7 @@ public class StaffApi
 
     public async Task PostToStaffLog(Infraction infraction)
     {
-        var channelId = db
-            .Select<StaffChannelConfig>()
-            .FirstOrDefault()
-            ?.StaffLogChannelId
-            ?? throw new NullReferenceException(nameof(StaffChannelConfig.StaffLogChannelId));
-
+        var channelId = GetStaffLogChannelId() ?? throw new NullReferenceException(nameof(StaffChannelConfig.StaffLogChannelId));
         if (await discord.GetChannelAsync(channelId) is not ITextChannel staffLogChannel)
             throw new Exception("Error accessing staff log channel");
 
@@ -62,12 +57,7 @@ public class StaffApi
 
     public async Task<StaffLogExport> ExportStaffLog()
     {
-        var channelId = db
-            .Select<StaffChannelConfig>()
-            .FirstOrDefault()
-            ?.StaffLogChannelId
-            ?? throw new NullReferenceException(nameof(StaffChannelConfig.StaffLogChannelId));
-
+        var channelId = GetStaffLogChannelId() ?? throw new NullReferenceException(nameof(StaffChannelConfig.StaffLogChannelId));
         if (await discord.GetChannelAsync(channelId) is not ITextChannel staffLogChannel)
             throw new Exception("Error accessing staff log channel; export failed");
 
@@ -124,6 +114,14 @@ public class StaffApi
         }
 
         return new(imported, skipped, export.UnparsedMessageUrls.Count);
+    }
+
+    private ulong? GetStaffLogChannelId()
+    {
+        return db
+            .Select<StaffChannelConfig>()
+            .FirstOrDefault()
+            ?.StaffLogChannelId;
     }
 
     public StaffApi(Database db, DiscordSocketClient discord, HttpClient http, ILogger<StaffApi> logger, IEnumerable<IStaffLogParser> logParsers)

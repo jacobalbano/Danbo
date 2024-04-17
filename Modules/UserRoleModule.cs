@@ -59,7 +59,7 @@ public partial class UserRoleModule : ModuleBase
         await defer;
         if (!ulong.TryParse(role, out var id) || !validRoles.Contains(id))
         {
-            audit.Audit("Invalid role assignment", userId: Context.User.Id, detailMessage: role, detailId: id, detailIdType: DetailIdType.Role );
+            audit.Log("Invalid role assignment", userId: Context.User.Id, detailMessage: role, detailId: id, detailIdType: DetailIdType.Role );
             throw new FollowupError("Invalid role selected");
         }
 

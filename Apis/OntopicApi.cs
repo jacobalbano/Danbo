@@ -31,11 +31,7 @@ public class OntopicApi
             throw new NullReferenceException(nameof(user));
 
         await user.RemoveRoleAsync(roleId, new RequestOptions { AuditLogReason = "Role expired" });
-        using var s = database.BeginSession();
-        foreach (var job in s.Select<OntopicExpirationJob>()
-            .Where(x => x.UserId == user.Id)
-            .ToEnumerable())
-            s.Delete(job);
+        RemoveOntopicExpiration(user.Id);
     }
 
     public async Task AddOntopicToUser(IGuildUser user, Instant expiration)
@@ -55,6 +51,15 @@ public class OntopicApi
         });
 
         await user.AddRoleAsync(roleId, new RequestOptions { AuditLogReason = "User requested role" });
+    }
+
+    public void RemoveOntopicExpiration(ulong userId)
+    {
+        using var s = database.BeginSession();
+        foreach (var job in s.Select<OntopicExpirationJob>()
+            .Where(x => x.UserId == userId)
+            .ToEnumerable())
+            s.Delete(job);
     }
 
     public ulong? GetOntopicRoleId() => GetConfig()?.RoleId;

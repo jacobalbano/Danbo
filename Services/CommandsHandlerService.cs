@@ -82,7 +82,7 @@ public class CommandHandlerService
 
             using var scope = services.GuildScope(arg2.Guild.Id);
             scope.ServiceProvider.GetRequiredService<AuditApi>()
-                .Audit("Attempted to run a privileged command", arg2.User.Id, detailMessage: arg1.Name);
+                .Log("Attempted to run a privileged command", arg2.User.Id, detailMessage: arg1.Name);
         }
         else if (arg3 is ExecuteResult e)
         {
