@@ -25,7 +25,7 @@ internal class ServerLogApi
         this.logger = logger;
     }
 
-    public async Task OnMessageUpdate(ServerLogJob work)
+    public async Task ProcessEvent(ServerLogJob work)
     {
         var channelId = db
             .Select<StaffChannelConfig>()
@@ -39,32 +39,52 @@ internal class ServerLogApi
         }
 
         var channel = client.GetChannel((ulong)channelId) as ITextChannel;
+        var mainEmbed = new EmbedBuilder();
+        var builders = new List<EmbedBuilder> { mainEmbed };
+        var color = Color.Default;
 
-        var builder = new EmbedBuilder()
-            .AddField("Old", work.CachedContent.NullIfEmpty() ?? "`not available in cache`")
-            .WithTitle($"Message {work.Type.ToString().ToLower()} in {work.Channel.Mention}");
-
-        switch (work.Type)
+        if (work is MessageChangeLogJob change)
         {
-            case MessageChangeType.Updated:
-                builder.WithColor(Color.Gold)
-                    .AddField("New", work.Message.Content)
-                    .WithDescription($"[Jump to message](<{work.Message.GetJumpUrl()}>)");
+            builders.Add(new EmbedBuilder()
+                .WithTitle("Old value")
+                .WithDescription(change.CachedContent.NullIfEmpty() ?? "`not available in cache`"));
+        }
+
+        switch (work)
+        {
+            case MessageUpdateLogJob update:
+                color = Color.Gold;
+                mainEmbed
+                    .WithAuthor(update.Message.Author)
+                    .WithDescription($"[Jump to message](<{update.Message.GetJumpUrl()}>)")
+                    .WithTitle($"Message updated in {update.Channel.Mention}")
+                    .AddField("Member", update.Message.Author.Mention);
+
+                builders.Add(new EmbedBuilder()
+                    .WithTitle("New value")
+                    .WithDescription(update.Message.Content));
                 break;
-            case MessageChangeType.Deleted:
-                builder.WithColor(Color.Purple);
+            case MessageDeleteLogJob delete:
+                color = Color.Purple;
+                mainEmbed.WithTitle($"Message deleted in {delete.Channel.Mention}");
+                if (delete.Message != null)
+                    mainEmbed
+                        .WithAuthor(delete.Message.Author)
+                        .AddField("Member", delete.Message.Author.Mention);
+                break;
+            case UserLeftLogJob userLeft:
+                color = Color.DarkTeal;
+                mainEmbed.WithTitle("User left")
+                    .AddField("Member", userLeft.User.Mention);
                 break;
             default:
-                throw new Exception($"Invalid value for {nameof(MessageChangeType)}");
+                logger.LogWarning($"Unhandled {nameof(ServerLogJob)} subclass {{jobTypeName}}", work.GetType().Name);
+                return;
         }
 
-        if (work.CachedContent != null)
-        {
-            builder.AddField("Member", work.Message.Author.Mention)
-                .WithAuthor(work.Message.Author);
-        }
-
-        await channel.SendMessageAsync(embed: builder.Build());
+        await channel.SendMessageAsync(embeds: builders
+            .Select(x => x.WithColor(color).Build())
+            .ToArray());
     }
 
     private readonly ScopedGuildId guildId;

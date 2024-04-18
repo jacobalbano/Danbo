@@ -22,6 +22,7 @@ public class ServerLoggingService
     {
         client.MessageDeleted += Client_MessageDeleted;
         client.MessageUpdated += Client_MessageUpdated;
+        client.UserLeft += Client_UserLeft;
         client.Connected += Client_Connected;
         this.client = client;
         this.logger = logger;
@@ -40,9 +41,17 @@ public class ServerLoggingService
         while (true)
         {
             var next = await queue.Reader.ReadAsync();
-            using var scope = services.GuildScope(next.Channel.GuildId);
+            using var scope = services.GuildScope(next.GuildId);
             var api = scope.ServiceProvider.GetRequiredService<ServerLogApi>();
-            await api.OnMessageUpdate(next);
+            try
+            {
+                await api.ProcessEvent(next);
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Error in server logging queue");
+                throw;
+            }
         }
     }
 
@@ -50,13 +59,19 @@ public class ServerLoggingService
     {
         if (source is not ITextChannel channel) return;
         if (message.Author.IsBot) return;
-        queue.Writer.TryWrite(new(channel, MessageChangeType.Updated, message, oldMessage.Value?.Content));
+        queue.Writer.TryWrite(new MessageUpdateLogJob(channel, message, oldMessage.Value?.Content));
     }
 
     private async Task Client_MessageDeleted(Cacheable<IMessage, ulong> oldMessage, Cacheable<IMessageChannel, ulong> source)
     {
         if (source.Value is not ITextChannel channel) return;
-        queue.Writer.TryWrite(new(channel, MessageChangeType.Deleted, oldMessage.Value, oldMessage.Value?.Content));
+        if (oldMessage.Value?.Author.IsBot ?? false) return;
+        queue.Writer.TryWrite(new MessageDeleteLogJob(channel, oldMessage.Value));
+    }
+
+    private async Task Client_UserLeft(SocketGuild guild, SocketUser user)
+    {
+        queue.Writer.TryWrite(new UserLeftLogJob(guild.Id, user));
     }
 
     private readonly DiscordSocketClient client;

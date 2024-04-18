@@ -48,6 +48,7 @@ public class InteractionAwaiter : IDisposable
     {
         if (disposed) throw new ObjectDisposedException(nameof(InteractionAwaiter));
         Stop();
+        tcs.SetCanceled();
         disposed = true;
     }
 
@@ -64,11 +65,11 @@ public class InteractionAwaiter : IDisposable
     /// </summary>
     public void Stop()
     {
+        if (!active) return;
         context.Client.ModalSubmitted -= Client_ModalSubmitted;
         context.Client.ButtonExecuted -= Client_ComponentExecuted;
         context.Client.SelectMenuExecuted -= Client_ComponentExecuted;
         timeoutTokenSource.Cancel();
-        tcs.SetCanceled();
         signals.Clear();
         active = false;
     }

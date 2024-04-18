@@ -7,5 +7,16 @@ using System.Threading.Tasks;
 
 namespace Danbo.Models.Jobs;
 
-public enum MessageChangeType { None, Updated, Deleted }
-public record class ServerLogJob(ITextChannel Channel, MessageChangeType Type, IMessage Message, string CachedContent = "");
+public record class ServerLogJob(ulong GuildId);
+
+public record class MessageChangeLogJob(ITextChannel Channel, IMessage Message, string CachedContent = "")
+    : ServerLogJob(Channel.GuildId);
+
+public record class MessageUpdateLogJob(ITextChannel Channel, IMessage Message, string CachedContent = "")
+    : MessageChangeLogJob(Channel, Message, CachedContent);
+
+public record class MessageDeleteLogJob(ITextChannel Channel, IMessage Message)
+    : MessageChangeLogJob(Channel, Message, Message?.Content);
+
+public record class UserLeftLogJob(ulong GuildId, IUser User)
+    : ServerLogJob(GuildId);
