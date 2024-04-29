@@ -94,11 +94,8 @@ public class ActivityAnalysisModule : ModuleBase
             .ToList();
 
         int pending = 0, half = 3;
-        var slice = e.Channels.TakeWhile(x => {
-            if (x.State == AnalysisState.Pending && ++pending > half)
-                return false;
-            return true;
-        }).TakeLast(half * 2)
+        var slice = e.Channels.TakeWhile(x => !(x.State == AnalysisState.Pending && ++pending > half))
+            .TakeLast(half * 2)
             .ToList();
 
         var remaining = e.Channels.Count - slice.Count;

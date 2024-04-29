@@ -17,6 +17,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Security.Authentication.ExtendedProtection;
 using System.Text;
 using System.Threading.Tasks;
@@ -135,10 +136,12 @@ public class AnalysisApi
                 try
                 {
                     var channel = await guild.GetTextChannelAsync(c.ChannelId);
-                    var result = await AnalyzeChannel(channel, c.ResumeMessageId, ct);
-                    c.ProcessedMessages += result.ProcessedMessages;
-                    c.ResumeMessageId = result.ResumeMessageId;
-                    c.State = result.State;
+                    await foreach (var result in AnalyzeChannel(channel, c.ResumeMessageId, ct))
+                    {
+                        c.ProcessedMessages = result.ProcessedMessages;
+                        c.ResumeMessageId = result.ResumeMessageId;
+                        c.State = result.State;
+                    }
                 }
                 catch (Exception)
                 {
@@ -168,17 +171,32 @@ public class AnalysisApi
                 channelReports.Establish(channel.Id, id => new() { ChannelId = id });
         }
 
-        private async Task<ChannelReport> AnalyzeChannel(ITextChannel channel, ulong? resumeMessageId, CancellationToken ct)
+        private static async IAsyncEnumerable<IReadOnlyCollection<IMessage>> ReadAllMessages(ITextChannel channel, ulong? resumeMessageId)
         {
-            var state = new ChannelReport { };
+
             var reader = resumeMessageId.HasValue
                 ? channel.GetMessagesAsync(resumeMessageId.Value, Direction.Before)
                 : channel.GetMessagesAsync();
 
-            await foreach (var chunk in reader)
+            while (true)
+            {
+                var messages = (await reader.FlattenAsync()).ToList();
+                if (messages.Count == 0)
+                    yield break;
+
+                reader = channel.GetMessagesAsync(messages.Last().Id, Direction.Before);
+                yield return messages;
+            }
+        }
+
+        private async IAsyncEnumerable<ChannelReport> AnalyzeChannel(ITextChannel channel, ulong? resumeMessageId, [EnumeratorCancellation] CancellationToken ct)
+        {
+            var state = new ChannelReport { };
+
+            await foreach (var chunk in ReadAllMessages(channel, resumeMessageId))
             {
                 if (ct.IsCancellationRequested)
-                    return state with { State = AnalysisState.Paused };
+                    yield return state with { State = AnalysisState.Paused };
 
                 foreach (var message in chunk)
                 {
@@ -196,10 +214,11 @@ public class AnalysisApi
                 }
 
                 state.ProcessedMessages += (uint)chunk.Count;
+                yield return state;
                 await Task.Delay(rateLimitDelay, CancellationToken.None);
             }
 
-            return state with { State = AnalysisState.Done };
+            yield return state with { State = AnalysisState.Done };
         }
 
         private async Task AnalyzeReactions(IMessage message)
