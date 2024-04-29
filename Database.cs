@@ -9,24 +9,24 @@ using System.Reflection;
 
 namespace Danbo;
 
-[AutoDiscoverScoped]
-public class Database
+public abstract class Database
 {
-    public Database(ScopedGuildId gid)
+    protected Database(ScopedGuildId gid, string filename)
     {
         if (gid.Id != null)
-            db = GetShared(gid.Id.Value);
+            db = GetShared(gid.Id.Value, filename);
     }
 
-    private static LiteDatabase GetShared(ulong id)
+    private static LiteDatabase GetShared(ulong id, string filename)
     {
         var directory = id.ToString();
         if (!Directory.Exists(id.ToString()))
             Directory.CreateDirectory(id.ToString());
 
-        if (!instances.TryGetValue(id, out var db))
+        var key = new InstanceKey(id, filename);
+        if (!instances.TryGetValue(key, out var db))
         {
-            instances[id] = db = new LiteDatabase(Path.Combine(directory, $"Data.db"));
+            instances[key] = db = new LiteDatabase(Path.Combine(directory, $"{filename}.db"));
             db.Mapper.ResolveCollectionName = CollectionNameResolver;
             db.Checkpoint();
         }
@@ -34,7 +34,8 @@ public class Database
         return db;
     }
 
-    private static readonly Dictionary<ulong, LiteDatabase> instances = new();
+    private record class InstanceKey(ulong GuildId, string FileName);
+    private static readonly Dictionary<InstanceKey, LiteDatabase> instances = new();
 
     private static string CollectionNameResolver(Type t)
     {
@@ -66,11 +67,13 @@ public class Database
 
     public interface ISession : IDisposable
     {
-        public T Insert<T>(T item);
-        public T InsertOrUpdate<T>(T item);
+        public T Insert<T>(T item) where T : ModelBase;
+        public T InsertOrUpdate<T>(T item) where T : ModelBase;
+        public int InsertOrUpdate<T>(IEnumerable<T> items) where T : ModelBase;
         public bool Delete<T>(T item) where T : ModelBase;
         public int DeleteAll<T>() where T : ModelBase;
         public bool Update<T>(T item) where T : ModelBase;
+        public int Update<T>(IEnumerable<T> items) where T : ModelBase;
         public ILiteQueryable<T> Select<T>();
         public SingletonWrapper<T> GetSingleton<T>() where T : ModelBase, new();
     }
@@ -85,16 +88,21 @@ public class Database
             owner = db;
         }
 
-        public T Insert<T>(T item)
+        public T Insert<T>(T item) where T : ModelBase
         {
             owner.Establish<T>().Insert(item);
             return item;
         }
 
-        public T InsertOrUpdate<T>(T item)
+        public T InsertOrUpdate<T>(T item) where T : ModelBase
         {
             owner.Establish<T>().Upsert(item);
             return item;
+        }
+
+        public int InsertOrUpdate<T>(IEnumerable<T> items) where T : ModelBase
+        {
+            return owner.Establish<T>().Upsert(items);
         }
 
         public bool Delete<T>(T item) where T : ModelBase
@@ -110,6 +118,11 @@ public class Database
         public bool Update<T>(T item) where T : ModelBase
         {
             return owner.Establish<T>().Update(item);
+        }
+
+        public int Update<T>(IEnumerable<T> items) where T : ModelBase
+        {
+            return owner.Establish<T>().Update(items);
         }
 
         public void Dispose()

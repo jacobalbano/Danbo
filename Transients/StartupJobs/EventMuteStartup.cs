@@ -14,7 +14,7 @@ public class EventMuteStartup : IStartupJob
 {
     public async Task Run(IGuild guild)
     {
-        var s = db.BeginSession();
+        using var s = db.BeginSession();
         foreach (var job in s.Select<EventMuteExpirationJob>().ToEnumerable())
         {
             var user = await guild.GetUserAsync(job.UserId);
@@ -31,10 +31,10 @@ public class EventMuteStartup : IStartupJob
         }
     }
 
-    public EventMuteStartup(Database db)
+    public EventMuteStartup(GuildDb db)
     {
         this.db = db;
     }
 
-    private readonly Database db;
+    private readonly GuildDb db;
 }

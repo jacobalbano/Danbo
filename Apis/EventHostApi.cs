@@ -25,12 +25,12 @@ public class EventHostApi
         return user.IsMuted;
     }
 
-    public EventHostApi(Database db, SchedulerService scheduler)
+    public EventHostApi(GuildDb db, SchedulerService scheduler)
     {
         this.db = db;
         this.scheduler = scheduler;
     }
 
-    private readonly Database db;
+    private readonly GuildDb db;
     private readonly SchedulerService scheduler;
 }

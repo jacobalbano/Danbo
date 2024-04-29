@@ -17,7 +17,7 @@ public static class StringExtensions
     public static IEnumerable<string> ToLines(this string input)
     {
         using var sr = new StringReader(input);
-        string? line = sr.ReadLine(), nextLine = null;
+        string line = sr.ReadLine(), nextLine = null;
         if (string.IsNullOrEmpty(line))
             nextLine = sr.ReadLine();
         else nextLine = line;

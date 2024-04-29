@@ -17,7 +17,7 @@ public class UserRoleAutocomplete : AutocompleteHandler
 {
     public override Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)
     {
-        var db = services.GetRequiredService<Database>();
+        var db = services.GetRequiredService<GuildDb>();
         var search = (autocompleteInteraction.Data.Current.Value as string ?? string.Empty)
             .ToUpperInvariant()
             .Split(' ');

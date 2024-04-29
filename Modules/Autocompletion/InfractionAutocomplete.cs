@@ -31,7 +31,7 @@ public class InfractionAutocomplete : AutocompleteHandler
             return Task.FromResult(AutocompletionResult.FromError(ex));
         }
 
-        var db = services.GetRequiredService<Database>();
+        var db = services.GetRequiredService<GuildDb>();
         var search = autocompleteInteraction.Data.Current.Value as string ?? string.Empty;
         var words = search.Split(' ');
         var result = db.Select<Infraction>()

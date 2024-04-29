@@ -12,7 +12,7 @@ namespace Danbo.Apis;
 [AutoDiscoverScoped]
 public class TagsApi
 {
-    public void SetTag(string tagName, string? content)
+    public void SetTag(string tagName, string content)
     {
         var tag = database
             .Select<Tag>()
@@ -24,7 +24,7 @@ public class TagsApi
         else s.InsertOrUpdate(tag with { Text = content });
     }
 
-    public string? GetTag(string tagName)
+    public string GetTag(string tagName)
     {
         return database
             .Select<Tag>()
@@ -42,10 +42,10 @@ public class TagsApi
             .ToList();
     }
 
-    public TagsApi(Database database)
+    public TagsApi(GuildDb database)
     {
         this.database = database;
     }
 
-    private readonly Database database;
+    private readonly GuildDb database;
 }

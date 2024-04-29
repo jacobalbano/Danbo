@@ -19,4 +19,14 @@ public static class EnumerableExtensions
         }
         return -1;
     }
+
+    public static TValue Establish<TKey, TValue>(this IDictionary<TKey, TValue> dict, TKey key, Func<TKey, TValue> factory = null)
+    {
+        if (dict.TryGetValue(key, out var value))
+            return value;
+
+        if (factory != null)
+            return dict[key] = factory(key);
+        return default;
+    }
 }

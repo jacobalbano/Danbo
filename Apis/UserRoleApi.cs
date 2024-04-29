@@ -43,10 +43,10 @@ public class UserRoleApi
         return dbRole != null;
     }
 
-    public UserRoleApi(Database database)
+    public UserRoleApi(GuildDb database)
     {
         this.database = database;
     }
 
-    private readonly Database database;
+    private readonly GuildDb database;
 }

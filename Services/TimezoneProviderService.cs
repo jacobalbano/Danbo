@@ -134,7 +134,7 @@ public class TimezoneProviderService
     private static readonly string dbFilepathTemp = $"{dbFilepath}.temp";
     private static readonly string dbFilepathPending = $"{dbFilepath}.pending";
     private readonly SchedulerService scheduler;
-    private readonly ILogger<TimezoneProviderService> logger;
+    private readonly ILogger logger;
 
     public IDateTimeZoneProvider Tzdb { get; private set; }
 }

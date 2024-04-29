@@ -17,7 +17,7 @@ namespace Danbo.Apis;
 [AutoDiscoverScoped]
 public class OntopicApi
 {
-    public OntopicApi(Database database, SchedulerService scheduler)
+    public OntopicApi(GuildDb database, SchedulerService scheduler)
     {
         this.database = database;
         this.scheduler = scheduler;
@@ -76,6 +76,6 @@ public class OntopicApi
         .Select<OntopicConfig>()
         .FirstOrDefault();
 
-    private readonly Database database;
+    private readonly GuildDb database;
     private readonly SchedulerService scheduler;
 }

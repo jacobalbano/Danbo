@@ -22,6 +22,7 @@ public class ServerLoggingService
     {
         client.MessageDeleted += Client_MessageDeleted;
         client.MessageUpdated += Client_MessageUpdated;
+        client.MessagesBulkDeleted += Client_MessagesBulkDeleted;
         client.UserLeft += Client_UserLeft;
         client.Connected += Client_Connected;
         this.client = client;
@@ -40,7 +41,9 @@ public class ServerLoggingService
     {
         while (true)
         {
+            await Task.Delay(TimeSpan.FromSeconds(1) / 60);
             var next = await queue.Reader.ReadAsync();
+
             using var scope = services.GuildScope(next.GuildId);
             var api = scope.ServiceProvider.GetRequiredService<ServerLogApi>();
             try
@@ -50,7 +53,6 @@ public class ServerLoggingService
             catch (Exception e)
             {
                 logger.LogError(e, "Error in server logging queue");
-                throw;
             }
         }
     }
@@ -69,6 +71,17 @@ public class ServerLoggingService
         queue.Writer.TryWrite(new MessageDeleteLogJob(channel, oldMessage.Value));
     }
 
+    private async Task Client_MessagesBulkDeleted(IReadOnlyCollection<Cacheable<IMessage, ulong>> oldMessages, Cacheable<IMessageChannel, ulong> source)
+    {
+        if (source.Value is not ITextChannel channel) return;
+
+        foreach (var message in oldMessages.OrderBy(x => x.Value?.Timestamp))
+        {
+            if (message.Value?.Author.IsBot ?? false) return;
+            queue.Writer.TryWrite(new MessageDeleteLogJob(channel, message.Value));
+        }
+    }
+
     private async Task Client_UserLeft(SocketGuild guild, SocketUser user)
     {
         queue.Writer.TryWrite(new UserLeftLogJob(guild.Id, user));
@@ -76,6 +89,6 @@ public class ServerLoggingService
 
     private readonly DiscordSocketClient client;
     private readonly IServiceProvider services;
-    private readonly ILogger<ServerLoggingService> logger;
+    private readonly ILogger logger;
     private readonly Channel<ServerLogJob> queue = Channel.CreateUnbounded<ServerLogJob>();
 }

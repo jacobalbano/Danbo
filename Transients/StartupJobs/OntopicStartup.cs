@@ -15,7 +15,7 @@ public class OntopicStartup : IStartupJob
 {
     public Task Run(IGuild guild)
     {
-        var s = db.BeginSession();
+        using var s = db.BeginSession();
         foreach (var job in s.Select<OntopicExpirationJob>().ToEnumerable())
         {
             scheduler.RemoveJob(job.JobHandle);
@@ -37,7 +37,7 @@ public class OntopicStartup : IStartupJob
         return Task.CompletedTask;
     }
 
-    public OntopicStartup(Database db, OntopicApi ontopicApi, SchedulerService scheduler, ILogger<OntopicStartup> logger)
+    public OntopicStartup(GuildDb db, OntopicApi ontopicApi, SchedulerService scheduler, ILogger<OntopicStartup> logger)
     {
         this.db = db;
         this.ontopicApi = ontopicApi;
@@ -45,8 +45,8 @@ public class OntopicStartup : IStartupJob
         this.logger = logger;
     }
 
-    private readonly Database db;
+    private readonly GuildDb db;
     private readonly OntopicApi ontopicApi;
     private readonly SchedulerService scheduler;
-    private readonly ILogger<OntopicStartup> logger;
+    private readonly ILogger logger;
 }

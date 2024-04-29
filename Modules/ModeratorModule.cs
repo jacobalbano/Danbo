@@ -178,16 +178,23 @@ public class ModeratorModule : ModuleBase
                 int messageCount = 0, channelCount = 0;
                 foreach (var chan in textChannels)
                 {
-                    var messages = (await chan.GetMessagesAsync()
-                        .FlattenAsync())
-                        .Where(x => x.Author == user)
-                        .Where(x => x.Timestamp.ToInstant() >= threshold)
-                        .ToList();
-                    if (!messages.Any()) continue;
+                    try
+                    {
+                        var messages = (await chan.GetMessagesAsync()
+                            .FlattenAsync())
+                            .Where(x => x.Author == user)
+                            .Where(x => x.Timestamp.ToInstant() >= threshold)
+                            .ToList();
+                        if (!messages.Any()) continue;
 
-                    await chan.DeleteMessagesAsync(messages);
-                    messageCount += messages.Count;
-                    channelCount++;
+                        await chan.DeleteMessagesAsync(messages);
+                        messageCount += messages.Count;
+                        channelCount++;
+                    }
+                    catch (Exception e)
+                    {
+                        logger.LogWarning(e, "Failed deleting messages from {channelId}", chan.Id);
+                    }
                 }
 
                 await defer;
@@ -198,7 +205,6 @@ public class ModeratorModule : ModuleBase
             await followup.ModifyAsync(x => x.Components = new ComponentBuilder().Build());
         }
     }
-
 
     [SlashCommand("unban", "Unban a user")]
     [RequireUserPermission(GuildPermission.BanMembers), DefaultMemberPermissions(GuildPermission.BanMembers)]
@@ -397,7 +403,7 @@ public class ModeratorModule : ModuleBase
     private readonly RapsheetApi rapsheet;
     private readonly AuditApi audit;
     private readonly StaffApi staffApi;
-    private readonly ILogger<ModeratorModule> logger;
+    private readonly ILogger logger;
 
     private static EmbedAuthorBuilder MakeAuthor(IUser user) => new EmbedAuthorBuilder()
         .WithName(user.Username)

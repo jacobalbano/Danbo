@@ -14,7 +14,7 @@ public record class AuditEntry : ModelBase
 
     public string Message { get; init; }
 
-    public string? DetailMessage { get; init; }
+    public string DetailMessage { get; init; }
 
     public ulong? DetailId { get; init; }
 

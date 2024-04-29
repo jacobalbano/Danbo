@@ -23,7 +23,7 @@ public class CommandHandlerService
 {
     private readonly InteractionService commands;
     private readonly DiscordSocketClient discord;
-    private readonly ILogger<CommandHandlerService> logger;
+    private readonly ILogger logger;
     private readonly IServiceProvider services;
 
     public CommandHandlerService(InteractionService commands, DiscordSocketClient discord, ILogger<CommandHandlerService> logger, IServiceProvider services)

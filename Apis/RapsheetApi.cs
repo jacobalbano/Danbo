@@ -57,10 +57,10 @@ public class RapsheetApi
         return toDelete;
     }
 
-    public RapsheetApi(Database db)
+    public RapsheetApi(GuildDb db)
     {
         this.db = db;
     }
 
-    private readonly Database db;
+    private readonly GuildDb db;
 }

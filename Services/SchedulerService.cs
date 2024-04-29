@@ -116,7 +116,7 @@ namespace Danbo.Services
                 return half.ToTimeSpan();
         }
 
-        private readonly ILogger<SchedulerService> logger;
+        private readonly ILogger logger;
         private readonly IdGenerator idGen;
         private readonly ConcurrentDictionary<ulong, Job> jobs = new();
         private CancellationTokenSource signal = new();

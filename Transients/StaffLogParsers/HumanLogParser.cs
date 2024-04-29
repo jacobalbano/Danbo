@@ -17,7 +17,7 @@ public class HumanLogParser : IStaffLogParser
 
     public IEnumerable<Infraction> ParseInfractions(IMessage message)
     {
-        string? action = null;
+        string action = null;
         var sb = new StringBuilder();
         foreach (var line in message.Content.ToLines())
         {

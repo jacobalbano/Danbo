@@ -1,6 +1,5 @@
 ﻿using Discord;
 using Discord.Interactions;
-using Danbo.Models;
 using Danbo.Utility;
 using NodaTime;
 using System.Diagnostics;
@@ -8,7 +7,6 @@ using System.Reflection;
 using System.Text;
 using Danbo.Apis;
 using System.Text.Json;
-using Microsoft.Extensions.Logging;
 
 namespace Danbo.Modules;
 
@@ -49,14 +47,13 @@ public class AdminModule : ModuleBase
     [DefaultMemberPermissions(GuildPermission.ModerateMembers)]
     public async Task ExportStaffLog()
     {
-        var defer = DeferAsync();
-
-        await defer;
+        await DeferAsync();
         await FollowupAsync("Generating export, please wait");
 
         var export = await staffApi.ExportStaffLog();
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(export, new JsonSerializerOptions { WriteIndented = true }));
         using var stream = new MemoryStream(bytes);
+        
         await Context.Channel.SendFileAsync(stream, "export.txt", $"{Context.User.Mention} Export completed. Upload the resulting file to the / `import-stafflog` command");
     }
 
@@ -74,12 +71,10 @@ public class AdminModule : ModuleBase
             .Build());
     }
 
-    public AdminModule(StaffApi staffApi, ILogger<AdminModule> logger)
+    public AdminModule(StaffApi staffApi)
     {
         this.staffApi = staffApi;
-        this.logger = logger;
     }
 
     private readonly StaffApi staffApi;
-    private readonly ILogger<AdminModule> logger;
 }

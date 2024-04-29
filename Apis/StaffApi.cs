@@ -124,19 +124,17 @@ public class StaffApi
             ?.StaffLogChannelId;
     }
 
-    public StaffApi(Database db, DiscordSocketClient discord, HttpClient http, ILogger<StaffApi> logger, IEnumerable<IStaffLogParser> logParsers)
+    public StaffApi(GuildDb db, DiscordSocketClient discord, HttpClient http, IEnumerable<IStaffLogParser> logParsers)
     {
         this.db = db;
         this.discord = discord;
         this.http = http;
-        this.logger = logger;
         this.logParsers = logParsers.ToDictionary(x => x.Id);
     }
 
-    private readonly Database db;
+    private readonly GuildDb db;
     private readonly DiscordSocketClient discord;
     private readonly HttpClient http;
-    private readonly ILogger<StaffApi> logger;
     private readonly IReadOnlyDictionary<ulong, IStaffLogParser> logParsers;
 
     public record class StaffLogExport(IReadOnlyList<Infraction> Infractions, IReadOnlyList<string> UnparsedMessageUrls);

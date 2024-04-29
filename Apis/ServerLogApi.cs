@@ -17,7 +17,7 @@ namespace Danbo.Apis;
 [AutoDiscoverScoped]
 internal class ServerLogApi
 {
-    public ServerLogApi(ScopedGuildId guildId, Database db, DiscordSocketClient client, ILogger<ServerLogApi> logger)
+    public ServerLogApi(ScopedGuildId guildId, GuildDb db, DiscordSocketClient client, ILogger<ServerLogApi> logger)
     {
         this.guildId = guildId;
         this.db = db;
@@ -53,6 +53,9 @@ internal class ServerLogApi
         switch (work)
         {
             case MessageUpdateLogJob update:
+                if (update.Message.Content == update.CachedContent)
+                    return;
+
                 color = Color.Gold;
                 mainEmbed
                     .WithAuthor(update.Message.Author)
@@ -88,7 +91,7 @@ internal class ServerLogApi
     }
 
     private readonly ScopedGuildId guildId;
-    private readonly Database db;
+    private readonly GuildDb db;
     private readonly DiscordSocketClient client;
-    private readonly ILogger<ServerLogApi> logger;
+    private readonly ILogger logger;
 }

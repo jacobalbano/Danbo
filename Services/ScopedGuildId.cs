@@ -11,6 +11,9 @@ namespace Danbo.Services;
 [AutoDiscoverScoped]
 public class ScopedGuildId
 {
+    public ScopedGuildId() { }
+    public ScopedGuildId(ulong id) => Initialize(id);
+
     public ulong? Id { get; private set; }
 
     public void Initialize(ulong? value)

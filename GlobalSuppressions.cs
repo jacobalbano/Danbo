@@ -5,4 +5,4 @@
 
 using System.Diagnostics.CodeAnalysis;
 
-[assembly: SuppressMessage("Usage", "CA1816:Dispose methods should call SuppressFinalize")]
+[assembly: SuppressMessage("Design", "CA1050:Declare types in namespaces", Justification = "Don't care", Scope = "type", Target = "~T:EnumerableExtensions")]

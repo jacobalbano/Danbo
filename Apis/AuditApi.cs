@@ -14,7 +14,7 @@ namespace Danbo.Apis;
 [AutoDiscoverScoped]
 public class AuditApi
 {
-    public void Log(string message, ulong? userId = null, ulong? detailId = null, DetailIdType detailIdType = DetailIdType.None, string? detailMessage = null)
+    public void Log(string message, ulong? userId = null, ulong? detailId = null, DetailIdType detailIdType = DetailIdType.None, string detailMessage = null)
     {
         using var s = database.BeginSession();
         s.Insert(new AuditEntry
@@ -27,7 +27,7 @@ public class AuditApi
         });
     }
 
-    public void Log<TDetailTuple>(string message, ulong? userId = null, ulong? detailId = null, DetailIdType detailIdType = DetailIdType.None, TDetailTuple? detailObject = default)
+    public void Log<TDetailTuple>(string message, ulong? userId = null, ulong? detailId = null, DetailIdType detailIdType = DetailIdType.None, TDetailTuple detailObject = default)
         where TDetailTuple : IStructuralEquatable, IStructuralComparable, IComparable
     {
         using var s = database.BeginSession();
@@ -46,10 +46,10 @@ public class AuditApi
         throw new NotImplementedException();
     }
 
-    public AuditApi(Database database)
+    public AuditApi(GuildDb database)
     {
         this.database = database;
     }
 
-    private readonly Database database;
+    private readonly GuildDb database;
 }
