@@ -1,20 +1,11 @@
 ﻿using Discord.Interactions;
 using Discord;
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
-using Discord.WebSocket;
 using Danbo.Apis;
 using Danbo.Services;
-using Microsoft.Extensions.Logging;
 using Danbo.Models.Jobs;
 using Danbo.Modules.Autocompletion;
-using static Danbo.Apis.AnalysisApi;
-using System.Text.Json;
 using Danbo.Errors;
-using System.Reactive;
 
 namespace Danbo.Modules;
 
@@ -22,6 +13,41 @@ namespace Danbo.Modules;
 [RequireOwner, DefaultMemberPermissions(GuildPermission.ManageGuild)]
 public class ActivityAnalysisModule : ModuleBase
 {
+    [SlashCommand("show-blacklist", "Display the list of blacklisted channels")]
+    public async Task ShowBlacklist()
+    {
+        await DeferAsync();
+        await FollowupAsync(embed: new EmbedBuilder()
+            .WithDescription(string.Join("\n", analysisApi.GetBlacklist()
+            .Select(x => $"- {MentionUtils.MentionChannel(x.ChannelId)}")))
+            .Build());
+    }
+
+    [SlashCommand("add-blacklist", "Add a channel to the blacklist")]
+    public async Task AddBlacklist(ITextChannel channel)
+    {
+        await DeferAsync();
+
+        analysisApi.AddBlacklist(channel);
+        audit.Log("Added channel to analysis blacklist", userId: Context.User.Id, detailId: channel.Id, detailIdType: Models.DetailIdType.Channel);
+        await FollowupAsync(embed: new EmbedBuilder()
+            .WithDescription($"Added {channel.Mention}")
+            .Build());
+    }
+
+    [SlashCommand("remove-blacklist", "Remove a channel from the blacklist")]
+    public async Task RemoveBlacklist(ITextChannel channel)
+    {
+        await DeferAsync();
+
+        analysisApi.RemoveBlacklist(channel);
+        audit.Log("Removed channel from analysis blacklist", userId: Context.User.Id, detailId: channel.Id, detailIdType: Models.DetailIdType.Channel);
+        await FollowupAsync(embed: new EmbedBuilder()
+            .WithDescription($"Removed {channel.Mention}")
+            .Build());
+
+    }
+
     [SlashCommand("start", "Download all messages in the history of the server for analysis")]
     public async Task AnalyzeActivity(
         [Summary(description: "The key of the job to resume"), Autocomplete(typeof(AnalysisJobAutocomplete))] string analysisKey = null
@@ -34,25 +60,30 @@ public class ActivityAnalysisModule : ModuleBase
         if (!Guid.TryParse(analysisKey, out var key))
             key = Guid.NewGuid();
 
-        var lastProgress = new GuildReport();
+        IReadOnlyList<ChannelReport> lastProgress = Array.Empty<ChannelReport>();
         var message = await ack.ReplyAsync(MakeReport(lastProgress));
-        var cts = new CancellationTokenSource();
 
-        var jobTask = Task.Run(async () =>
+        var cts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
         {
-            var result = await analysisApi.Run(key, new Progress<GuildReport>(x => lastProgress = x));
-            cts.Cancel();
-            return result;
+            int delay = 0;
+            var rqo = new RequestOptions()
+            {
+                RatelimitCallback = info => { delay = info.RetryAfter ?? 1; return Task.CompletedTask; },
+            };
+
+            while (!cts.Token.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1 + delay));
+                if (delay > 0) --delay;
+                try { await message.ModifyAsync(x => x.Content = MakeReport(lastProgress), rqo); }
+                catch { }
+            }
         });
 
-        while (!cts.Token.IsCancellationRequested)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            await message.ModifyAsync(x => x.Content = MakeReport(lastProgress));
-        }
-
-        var result = await jobTask;
-        await message.ModifyAsync(x => x.Content = MakeReport(result));
+        var result = await analysisApi.Run(key, new Progress<IReadOnlyList<ChannelReport>>(x => lastProgress = x));
+        cts.Cancel();
+        await Retry(() => message.ModifyAsync(x => x.Content = MakeReport(result.Channels)));
 
         switch (result.State)
         {
@@ -62,14 +93,41 @@ public class ActivityAnalysisModule : ModuleBase
                     await Context.Channel.SendFileAsync(stream, "activityAnalysis.txt", messageReference: message.Reference);
                 break;
             case AnalysisState.Paused:
-                await message.ReplyAsync("Analysis paused");
+                await Retry(() => message.ReplyAsync("Analysis paused"));
                 return;
             default:
                 throw UnhandledEnumException.From(result.State);
         }
     }
 
-    [SlashCommand("stop", "Stop an ongoing analysis job")]
+    private static async Task<T> Retry<T>(Func<Task<T>> method)
+    {
+        int attempts = 0;
+        while (true)
+        {
+            try { return await method(); }
+            catch
+            {
+                if (++attempts > 5) throw;
+                await Task.Delay(TimeSpan.FromSeconds(attempts));
+            }
+        }
+    }
+    private static async Task Retry(Func<Task> method)
+    {
+        int attempts = 0;
+        while (true)
+        {
+            try { await method(); break; }
+            catch
+            {
+                if (++attempts > 5) throw;
+                await Task.Delay(TimeSpan.FromSeconds(attempts));
+            }
+        }
+    }
+
+    [SlashCommand("pause", "Pause an ongoing analysis job")]
     public async Task StopAnalysis(
         [Summary(description: "The key of the job to stop"), Autocomplete(typeof(AnalysisJobAutocomplete))] string analysisKey
     )
@@ -85,29 +143,46 @@ public class ActivityAnalysisModule : ModuleBase
         await FollowupAsync("Analysis paused", ephemeral: true);
     }
 
-    static string MakeReport(GuildReport e)
+    [SlashCommand("cleanup", "Remove all past analysis jobs")]
+    public async Task Cleanup()
+    {
+        await DeferAsync();
+        analysisApi.Cleanup();
+
+        await FollowupAsync("Analysis jobs cleaned up");
+    }
+
+    static string MakeReport(IReadOnlyList<ChannelReport> channels)
     {
         var sb = new StringBuilder();
 
-        var doneChannels = e.Channels
+        var doneChannels = channels
             .Where(x => x.State != AnalysisState.Pending)
             .ToList();
 
-        int pending = 0, half = 3;
-        var slice = e.Channels.TakeWhile(x => {
-            if (x.State == AnalysisState.Pending && ++pending > half)
-                return false;
-            return true;
-        }).TakeLast(half * 2)
+        var errorChannels = channels
+            .Where(x => x.State == AnalysisState.Error)
             .ToList();
 
-        var remaining = e.Channels.Count - slice.Count;
-        sb.AppendLine($"**Messages processed:** {e.Channels.Select(x => (decimal)x.ProcessedMessages).Sum()}");
-        sb.AppendLine($"**Channels processed** ({doneChannels.Count}/{e.Channels.Count}):");
+        int pending = 0, half = 3;
+        var slice = channels.TakeWhile(x => !(x.State == AnalysisState.Pending && ++pending > half))
+            .TakeLast(half * 2)
+            .ToList();
+
+        var remaining = channels.Count - slice.Count;
+        sb.AppendLine($"**Messages processed**: {channels.Select(x => (decimal)x.ProcessedMessages).Sum()}");
+        sb.AppendLine($"**Channels processed** ({doneChannels.Count}/{channels.Count}):");
         foreach (var c in slice)
-            sb.AppendLine($"- {E(c.State)} {MentionUtils.MentionChannel(c.ChannelId)}");
+            sb.AppendLine($"- {E(c.State)} {MentionUtils.MentionChannel(c.ChannelId)} ({c.ProcessedMessages})");
         if (remaining > 0)
-            sb.AppendLine($"...and {remaining} more");
+            sb.AppendLine($"- ...and {remaining} more");
+
+        if (errorChannels.Any())
+        {
+            sb.AppendLine("**Error channels**:");
+            foreach (var c in errorChannels)
+                sb.AppendLine($"- {E(c.State)} {MentionUtils.MentionChannel(c.ChannelId)}");
+        }
 
         return sb.ToString();
 
@@ -130,11 +205,10 @@ public class ActivityAnalysisModule : ModuleBase
             .Where(x => x.GuildJoinInstant != null)
             .OrderBy(x => x.MessageCount)
             .ThenBy(x => x.MessagesEdited)
-            .ThenBy(x => x.ReactionCount)
             .ThenBy(x => x.GuildJoinInstant);
 
         var sb = new StringBuilder();
-        var fields = new object[6] { "Id", "Mention", "JoinDate", "MessageCount", "MessagesEdited", "ReactionCount" };
+        var fields = new object[5] { "Id", "Mention", "JoinDate", "MessageCount", "MessagesEdited" };
         var record = () => sb.AppendLine(string.Join('|', fields));
         record();
 
@@ -147,7 +221,6 @@ public class ActivityAnalysisModule : ModuleBase
                 .ToString("uuuu-MM-dd ", null);
             fields[3] = user.MessageCount;
             fields[4] = user.MessagesEdited;
-            fields[5] = user.ReactionCount;
             record();
         }
 

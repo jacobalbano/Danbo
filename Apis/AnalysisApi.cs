@@ -6,6 +6,7 @@ using Danbo.TypeConverters;
 using Danbo.Utility;
 using Danbo.Utility.DependencyInjection;
 using Discord;
+using Discord.Net;
 using Discord.WebSocket;
 using IdGen;
 using LiteDB;
@@ -27,32 +28,33 @@ namespace Danbo.Apis;
 [AutoDiscoverScoped]
 public class AnalysisApi
 {
-    public async Task<GuildReport> Run(Guid jobKey, IProgress<GuildReport> progress = null)
+    public async Task<GuildReport> Run(Guid jobKey, IProgress<IReadOnlyList<ChannelReport>> progress = null)
     {
         UpdateMarker(AnalysisState.Pending);
 
-        progress ??= new Progress<GuildReport>();
-        var cts = new CancellationTokenSource();
-        using var a = new Analyzer(guild, jobKey);
+        progress ??= new Progress<IReadOnlyList<ChannelReport>>();
+        var blacklist = GetBlacklist()
+            .Select(x => x.ChannelId)
+            .ToHashSet();
 
-        var jobTask = Task.Run(async () =>
+        using var a = new Analyzer(guild, jobKey, logger, blacklist);
+
+        var cts = new CancellationTokenSource();
+        _ = Task.Run(async () =>
         {
-            var result = await a.AnalyzeGuild(cts.Token);
-            cts.Cancel();
-            return result;
+            while (!cts.Token.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1));
+                progress.Report(a.ChannelReports().ToList());
+
+                if (cancelJob.TryRemove(jobKey, out _))
+                    cts.Cancel();
+            }
         });
 
-        while (!cts.IsCancellationRequested)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(1));
-            progress.Report(a.MakeReport(AnalysisState.Pending));
-
-            if (cancelJob.TryRemove(jobKey, out _))
-                cts.Cancel();
-        }
-
-        var result = await jobTask;
-        progress.Report(result);
+        var result = await a.AnalyzeGuild(cts.Token);
+        cts.Cancel();
+        progress.Report(result.Channels);
 
         UpdateMarker(result.State);
         return result;
@@ -79,24 +81,61 @@ public class AnalysisApi
         cancelJob[jobKey] = 0;
     }
 
+    public void Cleanup()
+    {
+        // TODO: delete the backing databases
+        using var s = db.BeginSession();
+        s.Delete(GetJobs()
+            .Where(x => x.State != AnalysisState.Running));
+    }
+
     public IEnumerable<AnalysisJob> GetJobs()
     {
         return db.Select<AnalysisJob>()
             .ToEnumerable();
     }
 
-    public AnalysisApi(ScopedGuildId gid, DiscordSocketClient client, GuildDb db)
+    public IEnumerable<AnalysisBlacklist> GetBlacklist()
+    {
+        return db.Select<AnalysisBlacklist>()
+            .ToEnumerable();
+    }
+
+    public void RemoveBlacklist(ITextChannel channel)
+    {
+        using var s = db.BeginSession();
+        var entry = s.Select<AnalysisBlacklist>()
+            .Where(x => x.ChannelId == channel.Id)
+            .FirstOrDefault();
+
+        if (entry != null)
+            s.Delete(entry);
+    }
+
+    public void AddBlacklist(ITextChannel channel)
+    {
+        using var s = db.BeginSession();
+        var entry = s.Select<AnalysisBlacklist>()
+            .Where(x => x.ChannelId == channel.Id)
+            .FirstOrDefault() ?? new() { ChannelId = channel.Id };
+        s.InsertOrUpdate(entry);
+    }
+
+    public AnalysisApi(ScopedGuildId gid, DiscordSocketClient client, GuildDb db, ILogger<AnalysisApi> logger)
     {
         if (gid.Id.HasValue)
             guild = client.GetGuild(gid.Id.Value);
         this.db = db;
+        this.logger = logger;
     }
 
     private class Analyzer : IDisposable
     {
-        public Analyzer(IGuild guild, Guid analysisKey)
+        public Analyzer(IGuild guild, Guid analysisKey, ILogger logger, IReadOnlySet<ulong> channelBlacklist)
         {
             this.guild = guild;
+            this.logger = logger;
+            this.channelBlacklist = channelBlacklist;
             store = new(new(guild.Id), analysisKey);
             userReports = store.Select<UserReport>()
                 .ToEnumerable()
@@ -104,10 +143,18 @@ public class AnalysisApi
 
             channelReports = store.Select<ChannelReport>()
                 .ToEnumerable()
+                .Where(x => !channelBlacklist.Contains(x.ChannelId))
                 .ToDictionary(x => x.ChannelId);
         }
 
-        public GuildReport MakeReport(AnalysisState resultState) => new()
+        public IEnumerable<ChannelReport> ChannelReports()
+        {
+            var keys = channelReports.Keys.ToList();
+            return keys.Select(x => channelReports[x])
+                .OrderByDescending(x => x.ChannelId);
+        }
+
+        public GuildReport MakeFullReport(AnalysisState resultState) => new()
         {
             Channels = channelReports.Values.ToList(),
             Users = userReports.Values.ToList(),
@@ -117,8 +164,9 @@ public class AnalysisApi
         public async Task<GuildReport> AnalyzeGuild(CancellationToken ct)
         {
             await Initialize();
+            var periodic = new InfrequentActor(Duration.FromMinutes(5));
 
-            foreach (var c in channelReports.Values)
+            foreach (var c in ChannelReports())
             {
                 switch (c.State)
                 {
@@ -127,10 +175,8 @@ public class AnalysisApi
                     case AnalysisState.Paused:
                         c.State = AnalysisState.Pending;
                         break;
-                    case AnalysisState.Done:
-                        continue;
-                    default:
-                        throw UnhandledEnumException.From(c.State);
+                    case AnalysisState.Done: continue;
+                    default: throw UnhandledEnumException.From(c.State);
                 }
 
                 try
@@ -138,21 +184,22 @@ public class AnalysisApi
                     var channel = await guild.GetTextChannelAsync(c.ChannelId);
                     await foreach (var result in AnalyzeChannel(channel, c.ResumeMessageId, ct))
                     {
-                        c.ProcessedMessages = result.ProcessedMessages;
+                        c.ProcessedMessages += result.ProcessedMessages;
                         c.ResumeMessageId = result.ResumeMessageId;
                         c.State = result.State;
+                        periodic.Act(() => Save());
                     }
                 }
-                catch (Exception)
+                catch
                 {
                     c.State = AnalysisState.Error;
                 }
 
                 if (ct.IsCancellationRequested)
-                    return MakeReport(AnalysisState.Paused);
+                    return MakeFullReport(AnalysisState.Paused);
             }
 
-            return MakeReport(AnalysisState.Done);
+            return MakeFullReport(AnalysisState.Done);
         }
 
         private async Task Initialize()
@@ -168,40 +215,58 @@ public class AnalysisApi
             }
 
             foreach (var channel in await guild.GetTextChannelsAsync())
+            {
+                if (channelBlacklist.Contains(channel.Id)) continue;
                 channelReports.Establish(channel.Id, id => new() { ChannelId = id });
+            }
         }
 
-        private static async IAsyncEnumerable<IReadOnlyCollection<IMessage>> ReadAllMessages(ITextChannel channel, ulong? resumeMessageId)
+        private async IAsyncEnumerable<IReadOnlyCollection<IMessage>> ReadAllMessages(ITextChannel channel, ulong? resumeMessageId)
         {
-
             var reader = resumeMessageId.HasValue
                 ? channel.GetMessagesAsync(resumeMessageId.Value, Direction.Before)
                 : channel.GetMessagesAsync();
 
             while (true)
             {
-                var messages = (await reader.FlattenAsync()).ToList();
+                var messages = await Retry(reader);
                 if (messages.Count == 0)
                     yield break;
 
-                reader = channel.GetMessagesAsync(messages.Last().Id, Direction.Before);
                 yield return messages;
+                reader = channel.GetMessagesAsync(messages[^1].Id, Direction.Before);
+                await Task.Delay(rateLimitDelay);
+            }
+
+            async Task<IReadOnlyList<IMessage>> Retry(IAsyncEnumerable<IReadOnlyCollection<IMessage>> reader)
+            {
+                int attempts = 0;
+                while (true)
+                {
+                    try { return (await reader.FlattenAsync()).ToList(); }
+                    catch (HttpException)
+                    {
+                        if (++attempts > 5) throw;
+                        logger.LogWarning("Got HTTP error; waiting {seconds} seconds to retry", attempts);
+                        await Task.Delay(TimeSpan.FromSeconds(attempts));
+                    }
+                }
             }
         }
 
         private async IAsyncEnumerable<ChannelReport> AnalyzeChannel(ITextChannel channel, ulong? resumeMessageId, [EnumeratorCancellation] CancellationToken ct)
         {
-            var state = new ChannelReport { };
-
             await foreach (var chunk in ReadAllMessages(channel, resumeMessageId))
             {
+                var state = new ChannelReport { };
                 if (ct.IsCancellationRequested)
+                {
                     yield return state with { State = AnalysisState.Paused };
+                    yield break;
+                }
 
                 foreach (var message in chunk)
                 {
-                    await AnalyzeReactions(message);
-
                     var messageTs = message.Timestamp.ToInstant();
                     var author = userReports.Establish(message.Author.Id, EstablishUser);
                     author.FirstMessageInstant = Instant.Min(author.FirstMessageInstant, messageTs);
@@ -218,26 +283,19 @@ public class AnalysisApi
                 await Task.Delay(rateLimitDelay, CancellationToken.None);
             }
 
-            yield return state with { State = AnalysisState.Done };
-        }
-
-        private async Task AnalyzeReactions(IMessage message)
-        {
-            foreach (var reaction in message.Reactions)
-            {
-                foreach (var user in await message.GetReactionUsersAsync(reaction.Key, 100).FlattenAsync())
-                    userReports.Establish(user.Id, EstablishUser)
-                        .ReactionCount++;
-            }
+            yield return new() { State = AnalysisState.Done };
         }
 
         private static UserReport EstablishUser(ulong id) => new() { UserId = id };
 
-        void IDisposable.Dispose()
+        void IDisposable.Dispose() => Save();
+
+        public void Save()
         {
             using var s = store.BeginSession();
             s.InsertOrUpdate(userReports.Values);
             s.InsertOrUpdate(channelReports.Values);
+            logger.LogDebug("Saved analysis state");
         }
 
         public class Store : Database
@@ -249,6 +307,8 @@ public class AnalysisApi
         private readonly Dictionary<ulong, UserReport> userReports;
         private readonly Dictionary<ulong, ChannelReport> channelReports;
         private readonly IGuild guild;
+        private readonly ILogger logger;
+        private readonly IReadOnlySet<ulong> channelBlacklist;
 
         // rate limit is 50 requests per second, so let's go 25 just to be safe
         private static readonly TimeSpan rateLimitDelay = TimeSpan.FromSeconds(1) / 25;
@@ -257,4 +317,5 @@ public class AnalysisApi
     private static readonly ConcurrentDictionary<Guid, byte> cancelJob = new();
     private readonly SocketGuild guild;
     private readonly GuildDb db;
+    private readonly ILogger logger;
 }

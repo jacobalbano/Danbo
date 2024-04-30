@@ -71,6 +71,7 @@ public abstract class Database
         public T InsertOrUpdate<T>(T item) where T : ModelBase;
         public int InsertOrUpdate<T>(IEnumerable<T> items) where T : ModelBase;
         public bool Delete<T>(T item) where T : ModelBase;
+        public int Delete<T>(IEnumerable<T> items) where T : ModelBase;
         public int DeleteAll<T>() where T : ModelBase;
         public bool Update<T>(T item) where T : ModelBase;
         public int Update<T>(IEnumerable<T> items) where T : ModelBase;
@@ -108,6 +109,11 @@ public abstract class Database
         public bool Delete<T>(T item) where T : ModelBase
         {
             return owner.Establish<T>().Delete(item.Key);
+        }
+
+        public int Delete<T>(IEnumerable<T> items) where T : ModelBase
+        {
+            return items.Count(Delete);
         }
 
         public int DeleteAll<T>() where T : ModelBase

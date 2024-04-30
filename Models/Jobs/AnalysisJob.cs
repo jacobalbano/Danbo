@@ -33,7 +33,6 @@ public record class UserReport : ModelBase
 {
     public ulong UserId { get; init; }
     public uint MessageCount { get; set; }
-    public uint ReactionCount { get; set; }
     public uint MessagesEdited { get; set; }
 
     [BsonConverter(typeof(NodaInstantBsonConverter))]

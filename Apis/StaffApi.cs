@@ -88,7 +88,7 @@ public class StaffApi
     public async Task<StaffLogImportReport> ImportStaffLog(IAttachment attachment)
     {
         var content = await http.GetStringAsync(attachment.Url);
-        var export = JsonSerializer.Deserialize<StaffLogExport>(content)!;
+        var export = JsonSerializer.Deserialize<StaffLogExport>(content);
         int imported = 0, skipped = 0;
 
         using var s = db.BeginSession();
