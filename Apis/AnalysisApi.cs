@@ -185,7 +185,7 @@ public class AnalysisApi
                     await foreach (var result in AnalyzeChannel(channel, c.ResumeMessageId, ct))
                     {
                         c.ProcessedMessages += result.ProcessedMessages;
-                        c.ResumeMessageId = result.ResumeMessageId;
+                        c.ResumeMessageId = result.ResumeMessageId ?? c.ResumeMessageId;
                         c.State = result.State;
                         periodic.Act(() => Save());
                     }
