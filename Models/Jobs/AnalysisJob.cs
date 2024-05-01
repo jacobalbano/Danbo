@@ -1,4 +1,5 @@
-﻿using Danbo.TypeConverters;
+﻿using Danbo.Errors;
+using Danbo.TypeConverters;
 using NodaTime;
 using System;
 using System.Collections.Generic;
@@ -21,6 +22,18 @@ public record class AnalysisJob : ModelBase
 }
 
 public enum AnalysisState { Pending, Running, Paused, Done,  Error }
+
+public static class AnalysisStateExt
+{
+    public static string ToEmoji(this AnalysisState state) => state switch
+    {
+        AnalysisState.Done => "✅",
+        AnalysisState.Error => "⚠️",
+        AnalysisState.Pending => "⌛",
+        AnalysisState.Paused => "⏸️",
+        _ => throw UnhandledEnumException.From(state)
+    };
+}
 
 public class GuildReport
 {

@@ -19,7 +19,8 @@ public class ActivityAnalysisModule : ModuleBase
         await DeferAsync();
         await FollowupAsync(embed: new EmbedBuilder()
             .WithDescription(string.Join("\n", analysisApi.GetBlacklist()
-            .Select(x => $"- {MentionUtils.MentionChannel(x.ChannelId)}")))
+            .Select(x => $"- {MentionUtils.MentionChannel(x.ChannelId)}"))
+            .NullIfEmpty() ?? "No channels blacklisted")
             .Build());
     }
 
@@ -69,7 +70,7 @@ public class ActivityAnalysisModule : ModuleBase
             int delay = 0;
             var rqo = new RequestOptions()
             {
-                RatelimitCallback = info => { delay = info.RetryAfter ?? 1; return Task.CompletedTask; },
+                RatelimitCallback = info => { delay = (info.RetryAfter ?? 5) + 1; return Task.CompletedTask; },
             };
 
             while (!cts.Token.IsCancellationRequested)
@@ -113,6 +114,7 @@ public class ActivityAnalysisModule : ModuleBase
             }
         }
     }
+
     private static async Task Retry(Func<Task> method)
     {
         int attempts = 0;
@@ -157,7 +159,7 @@ public class ActivityAnalysisModule : ModuleBase
         var sb = new StringBuilder();
 
         var doneChannels = channels
-            .Where(x => x.State != AnalysisState.Pending)
+            .Where(x => x.State == AnalysisState.Done)
             .ToList();
 
         var errorChannels = channels
@@ -165,7 +167,7 @@ public class ActivityAnalysisModule : ModuleBase
             .ToList();
 
         int pending = 0, half = 3;
-        var slice = channels.TakeWhile(x => !(x.State == AnalysisState.Pending && ++pending > half))
+        var slice = channels.TakeWhile(x => !(x.State != AnalysisState.Done && ++pending > half))
             .TakeLast(half * 2)
             .ToList();
 
@@ -173,7 +175,7 @@ public class ActivityAnalysisModule : ModuleBase
         sb.AppendLine($"**Messages processed**: {channels.Select(x => (decimal)x.ProcessedMessages).Sum()}");
         sb.AppendLine($"**Channels processed** ({doneChannels.Count}/{channels.Count}):");
         foreach (var c in slice)
-            sb.AppendLine($"- {E(c.State)} {MentionUtils.MentionChannel(c.ChannelId)} ({c.ProcessedMessages})");
+            sb.AppendLine($"- {c.State.ToEmoji()} {MentionUtils.MentionChannel(c.ChannelId)} ({c.ProcessedMessages})");
         if (remaining > 0)
             sb.AppendLine($"- ...and {remaining} more");
 
@@ -181,22 +183,10 @@ public class ActivityAnalysisModule : ModuleBase
         {
             sb.AppendLine("**Error channels**:");
             foreach (var c in errorChannels)
-                sb.AppendLine($"- {E(c.State)} {MentionUtils.MentionChannel(c.ChannelId)}");
+                sb.AppendLine($"- {c.State.ToEmoji()} {MentionUtils.MentionChannel(c.ChannelId)}");
         }
 
         return sb.ToString();
-
-        static string E(AnalysisState state)
-        {
-            return state switch
-            {
-                AnalysisState.Done => "✅",
-                AnalysisState.Error => "⚠️",
-                AnalysisState.Pending => "⌛",
-                AnalysisState.Paused => "⏸️",
-                _ => throw UnhandledEnumException.From(state)
-            };
-        }
     }
 
     private string MakeDetailedReport(GuildReport result)
