@@ -285,6 +285,8 @@ public class ModeratorModule : ModuleBase
             return;
         }
 
+        var message = await FollowupAsync("Beginning mass kick, please wait");
+
         var baseDelay = TimeSpan.FromSeconds(1) / 50;
         var delay = baseDelay;
         var ratelimit = new RequestOptions {
@@ -292,9 +294,11 @@ public class ModeratorModule : ModuleBase
         };
 
         var kicked = new HashSet<ulong>();
+        await Context.Guild.DownloadUsersAsync();
+
         foreach (var id in idsToKick)
         {
-            var user = await Context.Guild.GetUserAsync(id);
+            var user = Context.Guild.GetUser(id);
             if (user == null) continue;
 
             try
@@ -311,7 +315,7 @@ public class ModeratorModule : ModuleBase
             delay = baseDelay;
         }
 
-        await FollowupAsync($"Mass-kicked {kicked.Count} users: {kickReason}");
+        await message.ReplyAsync($"Mass-kicked {kicked.Count} users: {kickReason}");
     }
 
 
