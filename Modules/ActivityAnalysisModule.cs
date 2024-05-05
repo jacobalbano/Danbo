@@ -46,7 +46,6 @@ public class ActivityAnalysisModule : ModuleBase
         await FollowupAsync(embed: new EmbedBuilder()
             .WithDescription($"Removed {channel.Mention}")
             .Build());
-
     }
 
     [SlashCommand("start", "Download all messages in the history of the server for analysis")]
@@ -166,9 +165,11 @@ public class ActivityAnalysisModule : ModuleBase
             .Where(x => x.State == AnalysisState.Error)
             .ToList();
 
-        int pending = 0, half = 3;
-        var slice = channels.TakeWhile(x => !(x.State != AnalysisState.Done && ++pending > half))
-            .TakeLast(half * 2)
+        var skip = channels.FindIndex(x => x.State == AnalysisState.Running);
+        if (skip <= 0)
+            skip = channels.Count - 3;
+        var slice = channels.Skip(skip - 3)
+            .Take(6)
             .ToList();
 
         var remaining = channels.Count - slice.Count;
@@ -182,8 +183,11 @@ public class ActivityAnalysisModule : ModuleBase
         if (errorChannels.Any())
         {
             sb.AppendLine("**Error channels**:");
-            foreach (var c in errorChannels)
+            foreach (var c in errorChannels.Take(6))
                 sb.AppendLine($"- {c.State.ToEmoji()} {MentionUtils.MentionChannel(c.ChannelId)}");
+            var remainingErrors = errorChannels.Count - 6;
+            if (remainingErrors > 0)
+                sb.AppendLine($"- ...and {remainingErrors} more");
         }
 
         return sb.ToString();

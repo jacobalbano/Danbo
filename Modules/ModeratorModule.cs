@@ -7,18 +7,11 @@ using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
 using Discord.Net;
-using Discord.Rest;
 using Discord.WebSocket;
-using Microsoft.AspNetCore.DataProtection.KeyManagement;
 using Microsoft.Extensions.Logging;
-using Microsoft.VisualBasic;
 using NodaTime;
 using NodaTime.Extensions;
-using System.ComponentModel;
 using System.Text;
-using System.Text.Json;
-using System.Threading.Channels;
-using System.Xml.Linq;
 
 namespace Danbo.Modules;
 
@@ -231,6 +224,97 @@ public class ModeratorModule : ModuleBase
         audit.Log("User unbanned", Context.User.Id, user.Id, DetailIdType.User, message);
     }
 
+    [SlashCommand("mass-kick", "Kick a large number of users at once with a modal or a file upload")]
+    [RequireUserPermission(GuildPermission.BanMembers), DefaultMemberPermissions(GuildPermission.BanMembers)]
+    public async Task MassKick(
+        [Summary(description: "Kick reason")] string kickReason = null,
+        [Summary(description: "A list of user IDs (one per line)")] IAttachment attachment = null
+    )
+    {
+        kickReason ??= "No reason given";
+
+        var idsString = string.Empty;
+        if (attachment != null)
+        {
+            await DeferAsync();
+            idsString = await http.GetStringAsync(attachment.Url);
+        }
+        else
+        {
+            using var awaiter = new InteractionAwaiter(Context);
+            var modalSignal = awaiter.Signal();
+            await RespondWithModalAsync(new ModalBuilder()
+                .WithTitle("Mass kick")
+                .WithCustomId(modalSignal.InteractionId)
+                .AddTextInput("Kick reason", "reason", TextInputStyle.Short, required: true)
+                .AddTextInput("User IDs (one per line)", "content", TextInputStyle.Paragraph, required: true)
+                .Build());
+
+            await awaiter.HandleInteractionsAsync(async signal =>
+            {
+                if (signal != modalSignal)
+                    return;
+
+                if (signal.Interaction is not SocketModal result)
+                    return;
+
+                await result.DeferAsync();
+                idsString = result.Data.Components
+                    .FirstOrDefault(x => x.CustomId == "content")
+                    ?.Value.NullIfEmpty()
+                    ?? throw new Exception("Failed to find content component in modal");
+
+                kickReason = result.Data.Components
+                    .FirstOrDefault(x => x.CustomId == "reason")
+                    ?.Value.NullIfEmpty()
+                    ?? throw new Exception("Failed to find content component in modal");
+
+                awaiter.Stop();
+            });
+        }
+
+        var idsToKick = idsString.Split("\r\n")
+            .Select(x => (success: ulong.TryParse(x, out var value), value))
+            .Where(x => x.success)
+            .Select(x => x.value)
+            .ToList();
+
+        if (!idsToKick.Any())
+        {
+            await FollowupAsync("No IDs were supplied");
+            return;
+        }
+
+        var baseDelay = TimeSpan.FromSeconds(1) / 50;
+        var delay = baseDelay;
+        var ratelimit = new RequestOptions {
+            RatelimitCallback = async info => delay = TimeSpan.FromSeconds((info.RetryAfter ?? 1) + 1)
+        };
+
+        var kicked = new HashSet<ulong>();
+        foreach (var id in idsToKick)
+        {
+            var user = await Context.Guild.GetUserAsync(id);
+            if (user == null) continue;
+
+            try
+            {
+                await user.KickAsync(options: ratelimit);
+                rapsheet.Add(Context.User.Id, InfractionType.Note, id, $"Mass-kicked with reason: {kickReason}");
+                kicked.Add(id);
+            }
+            catch
+            {
+            }
+
+            await Task.Delay(delay);
+            delay = baseDelay;
+        }
+
+        await FollowupAsync($"Mass-kicked {kicked.Count} users: {kickReason}");
+    }
+
+
     [SlashCommand("rapsheet", "Display's a user's record")]
     [RequireUserPermission(GuildPermission.ModerateMembers), DefaultMemberPermissions(GuildPermission.ModerateMembers)]
     public async Task Rapsheet(
@@ -327,12 +411,13 @@ public class ModeratorModule : ModuleBase
         );
     }
 
-    public ModeratorModule(RapsheetApi rapsheet, AuditApi audit, StaffApi staffApi, ILogger<ModeratorModule> logger)
+    public ModeratorModule(RapsheetApi rapsheet, AuditApi audit, StaffApi staffApi, ILogger<ModeratorModule> logger, HttpClient http)
     {
         this.rapsheet = rapsheet;
         this.audit = audit;
         this.staffApi = staffApi;
         this.logger = logger;
+        this.http = http;
     }
 
     private async Task ShowRapsheetTable(IEnumerable<string> messages)
@@ -404,6 +489,7 @@ public class ModeratorModule : ModuleBase
     private readonly AuditApi audit;
     private readonly StaffApi staffApi;
     private readonly ILogger logger;
+    private HttpClient http;
 
     private static EmbedAuthorBuilder MakeAuthor(IUser user) => new EmbedAuthorBuilder()
         .WithName(user.Username)

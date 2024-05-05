@@ -21,6 +21,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Security.Authentication.ExtendedProtection;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Danbo.Apis;
@@ -30,7 +31,7 @@ public class AnalysisApi
 {
     public async Task<GuildReport> Run(Guid jobKey, IProgress<IReadOnlyList<ChannelReport>> progress = null)
     {
-        UpdateMarker(AnalysisState.Pending);
+        UpdateMarker(AnalysisState.Running);
 
         progress ??= new Progress<IReadOnlyList<ChannelReport>>();
         var blacklist = GetBlacklist()
@@ -173,7 +174,7 @@ public class AnalysisApi
                     case AnalysisState.Pending:
                     case AnalysisState.Error:
                     case AnalysisState.Paused:
-                        c.State = AnalysisState.Pending;
+                        c.State = AnalysisState.Running;
                         break;
                     case AnalysisState.Done: continue;
                     default: throw UnhandledEnumException.From(c.State);
@@ -182,6 +183,13 @@ public class AnalysisApi
                 try
                 {
                     var channel = await guild.GetTextChannelAsync(c.ChannelId);
+                    if (channel == null)
+                    {
+                        c.State = AnalysisState.Error;
+                        logger.LogWarning("Couldn't load channel {channelId} for analysis", c.ChannelId);
+                        continue;
+                    }
+
                     await foreach (var result in AnalyzeChannel(channel, c.ResumeMessageId, ct))
                     {
                         c.ProcessedMessages += result.ProcessedMessages;
@@ -190,9 +198,10 @@ public class AnalysisApi
                         periodic.Act(() => Save());
                     }
                 }
-                catch
+                catch (Exception e)
                 {
                     c.State = AnalysisState.Error;
+                    logger.LogError(e, "Error processing channel {channelId}", c.ChannelId);
                 }
 
                 if (ct.IsCancellationRequested)
@@ -214,10 +223,18 @@ public class AnalysisApi
                 });
             }
 
-            foreach (var channel in await guild.GetTextChannelsAsync())
+            var channels = new List<ITextChannel>();
+            channels.AddRange(await guild.GetTextChannelsAsync());
+            channels.AddRange(await guild.GetThreadChannelsAsync());
+            foreach (var forum in await guild.GetForumChannelsAsync())
+                channels.AddRange(await forum.GetActiveThreadsAsync());
+
+            foreach (var channel in channels.Where(x => !channelBlacklist.Contains(x.Id)))
             {
-                if (channelBlacklist.Contains(channel.Id)) continue;
-                channelReports.Establish(channel.Id, id => new() { ChannelId = id });
+                var report = channelReports.Establish(channel.Id, id => new() { ChannelId = id });
+                // clean up after a crash
+                if (report.State == AnalysisState.Running)
+                    report.State = AnalysisState.Pending;
             }
         }
 
@@ -250,6 +267,11 @@ public class AnalysisApi
                         logger.LogWarning("Got HTTP error; waiting {seconds} seconds to retry", attempts);
                         await Task.Delay(TimeSpan.FromSeconds(attempts));
                     }
+                    catch (Exception e)
+                    {
+                        logger.LogWarning(e, "Got unhandled error");
+                        throw;
+                    }
                 }
             }
         }
@@ -258,10 +280,10 @@ public class AnalysisApi
         {
             await foreach (var chunk in ReadAllMessages(channel, resumeMessageId))
             {
-                var state = new ChannelReport { };
+                var state = new ChannelReport { State = AnalysisState.Running };
                 if (ct.IsCancellationRequested)
                 {
-                    yield return state with { State = AnalysisState.Paused };
+                  yield return state with { State = AnalysisState.Paused };
                     yield break;
                 }
 

@@ -31,6 +31,7 @@ public static class AnalysisStateExt
         AnalysisState.Error => "⚠️",
         AnalysisState.Pending => "⌛",
         AnalysisState.Paused => "⏸️",
+        AnalysisState.Running => "🔄",
         _ => throw UnhandledEnumException.From(state)
     };
 }
