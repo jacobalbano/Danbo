@@ -84,18 +84,6 @@ public class CommandHandlerService
             scope.ServiceProvider.GetRequiredService<AuditApi>()
                 .Log("Attempted to run a privileged command", arg2.User.Id, detailMessage: arg1.Name);
         }
-        else if (arg3 is ExecuteResult e)
-        {
-            var embed = new EmbedBuilder()
-                .WithColor(Color.Red)
-                .WithDescription(e.Exception.Message)
-                .Build();
-
-            if (e.Exception is FollowupError)
-                await arg2.Interaction.FollowupAsync(embed: embed);
-            else if (e.Exception is RespondError)
-                await arg2.Interaction.RespondAsync(embed: embed);
-        }
     }
 
     private async Task JoinedGuild(SocketGuild guild)

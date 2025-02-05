@@ -5,7 +5,6 @@ using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.ObjectPool;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,7 +40,7 @@ public class ServerLoggingService
     {
         while (true)
         {
-            await Task.Delay(TimeSpan.FromSeconds(1) / 60);
+            await Task.Delay(TimeSpan.FromSeconds(1) / 6);
             var next = await queue.Reader.ReadAsync();
 
             using var scope = services.GuildScope(next.GuildId);
@@ -60,14 +59,14 @@ public class ServerLoggingService
     private async Task Client_MessageUpdated(Cacheable<IMessage, ulong> oldMessage, SocketMessage message, ISocketMessageChannel source)
     {
         if (source is not ITextChannel channel) return;
-        if (message.Author.IsBot) return;
+        if (message.Author.Id == client.CurrentUser.Id) return;
         queue.Writer.TryWrite(new MessageUpdateLogJob(channel, message, oldMessage.Value?.Content));
     }
 
     private async Task Client_MessageDeleted(Cacheable<IMessage, ulong> oldMessage, Cacheable<IMessageChannel, ulong> source)
     {
         if (source.Value is not ITextChannel channel) return;
-        if (oldMessage.Value?.Author.IsBot ?? false) return;
+        if (oldMessage.Value?.Author.Id == client.CurrentUser.Id) return;
         queue.Writer.TryWrite(new MessageDeleteLogJob(channel, oldMessage.Value));
     }
 
@@ -77,7 +76,7 @@ public class ServerLoggingService
 
         foreach (var message in oldMessages.OrderBy(x => x.Value?.Timestamp))
         {
-            if (message.Value?.Author.IsBot ?? false) return;
+            if (message.Value?.Author.Id == client.CurrentUser.Id) return;
             queue.Writer.TryWrite(new MessageDeleteLogJob(channel, message.Value));
         }
     }

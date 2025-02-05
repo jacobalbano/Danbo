@@ -1,6 +1,7 @@
 ﻿using Danbo.Apis;
 using Danbo.Errors;
 using Danbo.Modules.Preconditions;
+using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
 using System;
@@ -38,7 +39,10 @@ public class EventHostModule : ModuleBase
         catch (Exception)
         {
             await defer;
-            throw new FollowupError("Couldn't mute/unmute the user");
+
+            await FollowupAsync(embed: EmbedUtility.Error(
+                "Couldn't mute/unmute the user"
+            ));
         }
     }
 

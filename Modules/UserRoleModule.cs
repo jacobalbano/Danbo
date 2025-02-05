@@ -24,26 +24,33 @@ public partial class UserRoleModule : ModuleBase
         [Summary(description: "The role you want to remove from yourself"), Autocomplete(typeof(UserRoleAutocomplete))] string role
     )
     {
-        var defer = DeferAsync();
-        var validRoles = userRoles
-            .GetUserRoles()
-            .ToHashSet();
-
-        await defer;
-        if (!ulong.TryParse(role, out var id) || !validRoles.Contains(id))
-            throw new FollowupError("Invalid role selected");
-
-        if (Context.User is IGuildUser user)
+        try
         {
-            if (!user.RoleIds.Contains(id))
-                throw new FollowupError("You don't currently have that role");
-            await user.RemoveRoleAsync(id);
-        }
+            var defer = DeferAsync();
+            var validRoles = userRoles
+                .GetUserRoles()
+                .ToHashSet();
 
-        await FollowupAsync(embed: new EmbedBuilder()
-            .WithDescription($"Removed {MentionUtils.MentionRole(id)}")
-            .Build()
-        );
+            await defer;
+            if (!ulong.TryParse(role, out var id) || !validRoles.Contains(id))
+                throw new UserFacingError("Invalid role selected");
+
+            if (Context.User is IGuildUser user)
+            {
+                if (!user.RoleIds.Contains(id))
+                    throw new UserFacingError("You don't currently have that role");
+                await user.RemoveRoleAsync(id);
+            }
+
+            await FollowupAsync(embed: new EmbedBuilder()
+                .WithDescription($"Removed {MentionUtils.MentionRole(id)}")
+                .Build()
+            );
+        }
+        catch (UserFacingError e)
+        {
+            await FollowupAsync(embed: EmbedUtility.Error(e));
+        }
     }
 
     [SlashCommand("assign", "Assign a user-assigned role to yourself")]
@@ -51,29 +58,36 @@ public partial class UserRoleModule : ModuleBase
         [Summary(description: "The role you want to assign to yourself"), Autocomplete(typeof(UserRoleAutocomplete))] string role
     )
     {
-        var defer = DeferAsync();
-        var validRoles = userRoles
-            .GetUserRoles()
-            .ToHashSet();
-
-        await defer;
-        if (!ulong.TryParse(role, out var id) || !validRoles.Contains(id))
+        try
         {
-            audit.Log("Invalid role assignment", userId: Context.User.Id, detailMessage: role, detailId: id, detailIdType: DetailIdType.Role );
-            throw new FollowupError("Invalid role selected");
-        }
+            var defer = DeferAsync();
+            var validRoles = userRoles
+                .GetUserRoles()
+                .ToHashSet();
 
-        if (Context.User is IGuildUser user)
+            await defer;
+            if (!ulong.TryParse(role, out var id) || !validRoles.Contains(id))
+            {
+                audit.Log("Invalid role assignment", userId: Context.User.Id, detailMessage: role, detailId: id, detailIdType: DetailIdType.Role);
+                throw new UserFacingError("Invalid role selected");
+            }
+
+            if (Context.User is IGuildUser user)
+            {
+                if (user.RoleIds.Contains(id))
+                    throw new UserFacingError("You already have that role");
+                await user.AddRoleAsync(id);
+            }
+
+            await FollowupAsync(embed: new EmbedBuilder()
+                .WithDescription($"Added {MentionUtils.MentionRole(id)}")
+                .Build()
+            );
+        }
+        catch (UserFacingError e)
         {
-            if (user.RoleIds.Contains(id))
-                throw new FollowupError("You already have that role");
-            await user.AddRoleAsync(id);
+            await FollowupAsync(embed: EmbedUtility.Error(e));
         }
-
-        await FollowupAsync(embed: new EmbedBuilder()
-            .WithDescription($"Added {MentionUtils.MentionRole(id)}")
-            .Build()
-        );
     }
 
     [SlashCommand("list", "Show user-assignable roles")]

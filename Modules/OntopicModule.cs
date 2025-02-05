@@ -2,6 +2,7 @@
 using Danbo.Errors;
 using Danbo.Modules.Parameters;
 using Danbo.Services;
+using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
 using NodaTime;
@@ -20,24 +21,44 @@ public class OntopicModule : ModuleBase
     [SlashCommand("ontopic", "Block access to offtopic channels for a given amount of time")]
     public async Task GoOntopic(int amount, DurationUnit unit)
     {
-        var defer = DeferAsync();
-        var duration = unit.ToDuration(amount);
+        try
+        {
+            var defer = DeferAsync();
+            var duration = unit.ToDuration(amount);
 
-        await defer;
-        if (duration > maxDuration)
-            throw new FollowupError("Please limit your use of this command to intervals of 30 days or less");
+            if (amount <= 0)
+            {
+                await defer;
+                await FollowupAsync(embed: EmbedUtility.Error("Invalid value."));
+                return;
+            }
 
-        var expiration = SystemClock.Instance.GetCurrentInstant() + duration;
-        await ontopic.AddOntopicToUser((IGuildUser)Context.User, expiration);
+            if (duration > maxDuration)
+            {
+                await defer;
+                await FollowupAsync(embed: EmbedUtility.Error(@"
+                Please limit your use of this command to intervals of 30 days or less.
+                For longer terms, contact a moderator directly."
+                ));
+                return;
+            }
 
-        var embed = new EmbedBuilder()
-            .WithDescription($"Ontopic applied until <t:{expiration.ToUnixTimeSeconds()}:f>")
-            .Build();
+            var expiration = SystemClock.Instance.GetCurrentInstant() + duration;
+            await ontopic.AddOntopicToUser((IGuildUser)Context.User, expiration);
 
-        await FollowupAsync(embed: embed);
+            var embed = EmbedUtility.Message(
+                $"Ontopic applied until <t:{expiration.ToUnixTimeSeconds()}:f>"
+            );
 
-        try { await Context.User.SendMessageAsync(embed: embed); }
-        catch (Exception) { }
+            await FollowupAsync(embed: embed);
+            try { await Context.User.SendMessageAsync(embed: embed); }
+            catch (Exception) { }
+        }
+        catch (UserFacingError e)
+        {
+            await FollowupAsync(embed: EmbedUtility.Error(e));
+            return;
+        }
     }
 
     public OntopicModule(OntopicApi ontopic)

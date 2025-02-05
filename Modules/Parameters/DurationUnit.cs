@@ -24,7 +24,7 @@ public static class DurationUnitExtensions
             DurationUnit.Minutes => Duration.FromMinutes(amount),
             DurationUnit.Hours => Duration.FromHours(amount),
             DurationUnit.Days => Duration.FromDays(amount),
-            _ => throw new FollowupError("Invalid unit parameter")
+            _ => throw new UserFacingError("Invalid unit parameter; please specify 'minutes', 'hours', or 'days'")
         };
     }
 }

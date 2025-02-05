@@ -12,6 +12,7 @@ using Danbo.Services;
 using IdGen;
 using Danbo.Utility.DependencyInjection;
 using Serilog.Configuration;
+using Discord.Rest;
 
 namespace Danbo;
 
@@ -76,8 +77,7 @@ public class Program
             LogLevel = LogSeverity.Error
 #endif
         })
-        .AddSingleton(new InteractionServiceConfig { AutoServiceScopes = false })
-        .AddSingleton<InteractionService>()
+        .AddSingleton(p => new InteractionService(p.GetRequiredService<DiscordSocketClient>(), new() { AutoServiceScopes = false }))
         .AddSingleton(new HttpClient())
         .AddLogging(x => ConfigureLogging(x))
         .BuildServiceProvider()

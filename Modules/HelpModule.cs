@@ -129,6 +129,9 @@ public class HelpModule : ModuleBase
             public DateTimeOffset? RequestToSpeakTimestamp => user.RequestToSpeakTimestamp;
             public string AvatarDecorationHash => user.AvatarDecorationHash;
             public ulong? AvatarDecorationSkuId => user.AvatarDecorationSkuId;
+
+            public string GuildBannerHash => user.GuildBannerHash;
+
             public ChannelPermissions GetPermissions(IGuildChannel channel) => ChannelPermissions.None;
             public string GetGuildAvatarUrl(ImageFormat format = ImageFormat.Auto, ushort size = 128) => user.GetGuildAvatarUrl(format, size);
             public string GetDisplayAvatarUrl(ImageFormat format = ImageFormat.Auto, ushort size = 128) => user.GetDisplayAvatarUrl(format, size);
@@ -147,11 +150,8 @@ public class HelpModule : ModuleBase
             public string GetAvatarUrl(ImageFormat format = ImageFormat.Auto, ushort size = 128) => user.GetAvatarUrl(format, size);
             public string GetDefaultAvatarUrl() => user.GetDefaultAvatarUrl();
             public Task<IDMChannel> CreateDMChannelAsync(RequestOptions options = null) => user.CreateDMChannelAsync(options);
-
-            public string GetAvatarDecorationUrl()
-            {
-                throw new NotImplementedException();
-            }
+            public string GetAvatarDecorationUrl() => user.GetAvatarDecorationUrl();
+            public string GetGuildBannerUrl(ImageFormat format = ImageFormat.Auto, ushort size = 128) => user.GetGuildBannerUrl(format, size);
         }
 
         private class UnprivelegedInteraction : IDiscordInteraction
@@ -190,8 +190,12 @@ public class HelpModule : ModuleBase
             public Task RespondWithFilesAsync(IEnumerable<FileAttachment> attachments, string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null) => interaction.RespondWithFilesAsync(attachments, text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options);
             public Task RespondWithModalAsync(Modal modal, RequestOptions options = null) => interaction.RespondWithModalAsync(modal, options);
             public Task RespondWithPremiumRequiredAsync(RequestOptions options = null) => interaction.RespondWithPremiumRequiredAsync(options);
+            public Task RespondAsync(string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null, PollProperties poll = null) => interaction.RespondAsync(text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options, poll);
+            public Task RespondWithFilesAsync(IEnumerable<FileAttachment> attachments, string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null, PollProperties poll = null) => interaction.RespondWithFilesAsync(attachments, text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options, poll);
+            public Task<IUserMessage> FollowupAsync(string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null, PollProperties poll = null) => interaction.FollowupAsync(text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options, poll);
+            public Task<IUserMessage> FollowupWithFilesAsync(IEnumerable<FileAttachment> attachments, string text = null, Embed[] embeds = null, bool isTTS = false, bool ephemeral = false, AllowedMentions allowedMentions = null, MessageComponent components = null, Embed embed = null, RequestOptions options = null, PollProperties poll = null) => interaction.FollowupWithFilesAsync(attachments, text, embeds, isTTS, ephemeral, allowedMentions, components, embed, options, poll);
 
-            private IDiscordInteraction interaction;
+            private readonly IDiscordInteraction interaction;
         }
     }
 }

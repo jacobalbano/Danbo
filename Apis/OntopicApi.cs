@@ -26,7 +26,7 @@ public class OntopicApi
     public async Task RemoveOntopicFromUser(IGuildUser user)
     {
         if (GetOntopicRoleId() is not ulong roleId)
-            throw new FollowupError("Ontopic is not configured.");
+            throw new UserFacingError("Ontopic is not configured.");
         if (user == null)
             throw new NullReferenceException(nameof(user));
 
@@ -37,10 +37,10 @@ public class OntopicApi
     public async Task AddOntopicToUser(IGuildUser user, Instant expiration)
     {
         if (GetOntopicRoleId() is not ulong roleId)
-            throw new FollowupError("Ontopic is not configured.");
+            throw new UserFacingError("Ontopic is not configured.");
 
         if (user.RoleIds.Contains(roleId))
-            throw new FollowupError("You already have the Ontopic role");
+            throw new UserFacingError("You already have the Ontopic role");
 
         using var s = database.BeginSession();
         s.Insert(new OntopicExpirationJob

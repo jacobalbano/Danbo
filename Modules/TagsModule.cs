@@ -1,6 +1,7 @@
 ﻿using Danbo.Apis;
 using Danbo.Errors;
 using Danbo.Modules.Autocompletion;
+using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
 using System;
@@ -21,12 +22,22 @@ public class TagsModule : ModuleBase
         [Autocomplete(typeof(TagsAutocomplete))] string tagName
     )
     {
+        if (!tags.TryTakeWithCooldown(Context.Channel.Id, tagName))
+        {
+            await RespondAsync(ephemeral:true, embed: EmbedUtility.Message("This tag is currently on cooldown"));
+            return;
+        }
+
         var defer = DeferAsync();
         var tagText = tags.GetTag(tagName);
 
         await defer;
         if (tagText == null)
-            throw new FollowupError("Invalid tag");
+        {
+            await FollowupAsync(embed: EmbedUtility.Error(
+                "Invalid tag"
+            ));
+        }
 
         await FollowupAsync(tagText);
     }

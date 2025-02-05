@@ -7,10 +7,14 @@ using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
 using Discord.Net;
+using Discord.Webhook;
 using Discord.WebSocket;
 using Microsoft.Extensions.Logging;
 using NodaTime;
 using NodaTime.Extensions;
+using System.Net.Http;
+using System.Net.Mail;
+using System.Reactive;
 using System.Text;
 
 namespace Danbo.Modules;
@@ -50,7 +54,7 @@ public class ModeratorModule : ModuleBase
         [Summary(description: "The warn reason")] string message
     )
     {
-        var defer = DeferAsync();
+        var defer = DeferAsync(ephemeral: true);
 
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Warn, user.Id, message);
         audit.Log("User warned", Context.User.Id, user.Id, DetailIdType.User, message);
@@ -68,7 +72,11 @@ public class ModeratorModule : ModuleBase
         {
             await defer;
             await Context.Channel.SendMessageAsync(MentionUtils.MentionUser(user.Id), embed: embed.Build());
-            await FollowupAsync("_ _");
+            await FollowupAsync(ephemeral: true, embed: new EmbedBuilder()
+                .WithAuthor(MakeAuthor(user))
+                .WithTitle("User warned")
+                .WithDescription(message)
+                .Build());
         }
         catch (HttpException)
         {
@@ -85,18 +93,22 @@ public class ModeratorModule : ModuleBase
         DurationUnit unit
     )
     {
-        var defer = DeferAsync();
+        var defer = DeferAsync(ephemeral: true);
         var duration = unit.ToDuration(amount);
         var until = SystemClock.Instance.GetCurrentInstant() + duration;
 
         try { await user.SetTimeOutAsync(duration.ToTimeSpan()); }
-        catch (Exception) { throw new FollowupError("Error timing user out"); }
+        catch (Exception e)
+        {
+            logger.LogError(e, "Error timing user out");
+            await FollowupAsync(ephemeral: true, embed: EmbedUtility.Error(
+                "Error timing user out"
+            ));
+            return;
+        }
 
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Timeout, user.Id, message);
         audit.Log("User timed out", Context.User.Id, user.Id, DetailIdType.User, message);
-
-        try { await staffApi.PostToStaffLog(infraction); }
-        catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
 
         var embed = new EmbedBuilder()
             .WithAuthor(MakeAuthor(user))
@@ -104,8 +116,17 @@ public class ModeratorModule : ModuleBase
             .WithColor(infraction.Type.ToColor())
             .WithDescription(message);
 
+        await Context.Channel.SendMessageAsync(MentionUtils.MentionUser(user.Id), embed: embed.Build());
+
+        try { await staffApi.PostToStaffLog(infraction); }
+        catch (Exception e) { logger.LogError(e, "Couldn't post to staff log"); }
+
         await defer;
-        await FollowupAsync(embed: embed.Build(), allowedMentions: new AllowedMentions(AllowedMentionTypes.Users));
+        await FollowupAsync(ephemeral: true, embed: new EmbedBuilder()
+            .WithAuthor(MakeAuthor(user))
+            .WithTitle("User timed out")
+            .WithDescription(message)
+            .Build());
     }
 
     [SlashCommand("ban", "Ban a user")]
@@ -113,12 +134,12 @@ public class ModeratorModule : ModuleBase
     public async Task Ban(
         [Summary(description: "The user to ban")] IUser user,
         [Summary(description: "A reason for the ban")] string message,
-        [Summary(description: "Delete recent messages?")] bool deleteMessages = false
+        [Summary(description: "Delete recent messages?")] bool? deleteMessages = null
     )
     {
         var defer = DeferAsync();
 
-        await Context.Guild.AddBanAsync(user, pruneDays: deleteMessages ? 1 : 0, message);
+        await Context.Guild.AddBanAsync(user, pruneDays: deleteMessages == true ? 1 : 0, message);
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Ban, user.Id, message);
 
         try { await staffApi.PostToStaffLog(infraction); }
@@ -134,9 +155,14 @@ public class ModeratorModule : ModuleBase
             .Build();
 
         var followup = await FollowupAsync(embed: embed);
-        audit.Log("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
 
-        if (!deleteMessages)
+        audit.Log("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
+        await FollowupAsync(ephemeral: true, embed: new EmbedBuilder()
+            .WithAuthor(MakeAuthor(user))
+            .WithTitle("User banned")
+            .Build());
+
+        if (deleteMessages == null)
         {
             using var awaiter = new InteractionAwaiter(Context);
             var confirm = awaiter.Signal();
@@ -152,6 +178,12 @@ public class ModeratorModule : ModuleBase
             {
                 if (signal.Interaction is not SocketMessageComponent component)
                     return;
+
+                if (signal.Interaction.User != Context.User)
+                {
+                    await signal.Interaction.RespondAsync("Only the user who ran the command can interact with it.", ephemeral: true);
+                    return;
+                }
 
                 if (signal == cancel) awaiter.Stop();
                 if (signal != confirm) return;
@@ -267,7 +299,7 @@ public class ModeratorModule : ModuleBase
                 kickReason = result.Data.Components
                     .FirstOrDefault(x => x.CustomId == "reason")
                     ?.Value.NullIfEmpty()
-                    ?? throw new Exception("Failed to find content component in modal");
+                    ?? throw new Exception("Failed to find reason component in modal");
 
                 awaiter.Stop();
             });
@@ -318,7 +350,6 @@ public class ModeratorModule : ModuleBase
         await message.ReplyAsync($"Mass-kicked {kicked.Count} users: {kickReason}");
     }
 
-
     [SlashCommand("rapsheet", "Display's a user's record")]
     [RequireUserPermission(GuildPermission.ModerateMembers), DefaultMemberPermissions(GuildPermission.ModerateMembers)]
     public async Task Rapsheet(
@@ -363,7 +394,9 @@ public class ModeratorModule : ModuleBase
         if (!Guid.TryParse(infractionKey, out var key))
         {
             await defer;
-            throw new FollowupError("Invalid infraction key");
+            await FollowupAsync(embed: EmbedUtility.Error(
+                "Invalid infraction key"
+            ));
         }
 
         using var awaiter = new InteractionAwaiter(Context);
@@ -413,6 +446,128 @@ public class ModeratorModule : ModuleBase
             new EmbedBuilder().WithDescription(message).Build(),
             new ComponentBuilder().Build()
         );
+    }
+
+    //[MessageCommand("Move Message")]
+    [RequireUserPermission(ChannelPermission.ManageMessages)]
+    public async Task MoveMessage(IMessage message)
+    {
+        using var awaiter = new InteractionAwaiter(Context);
+        var modalSignal = awaiter.Signal();
+
+        await RespondAsync("Select a channel", ephemeral: true, components: new ComponentBuilder()
+            .WithSelectMenu(new SelectMenuBuilder()
+                .WithType(ComponentType.ChannelSelect)
+                .WithPlaceholder("Select a channel")
+                .WithCustomId(modalSignal.InteractionId)
+                .WithChannelTypes(ChannelType.Text)
+                .WithMinValues(1)
+                .WithMaxValues(1)
+            ).Build());
+
+        await awaiter.HandleInteractionsAsync(async signal =>
+        {
+            if (signal != modalSignal)
+                return;
+
+            if (signal.Interaction is not SocketMessageComponent result)
+                return;
+
+            var moveTo = result.Data.Channels.FirstOrDefault() as ITextChannel;
+            var defer = result.DeferAsync();
+
+            try
+            {
+                var avatar = await http.GetStreamAsync(message.Author.GetAvatarUrl());
+                var hook = await moveTo.CreateWebhookAsync(message.Author.Username, avatar);
+
+                ulong newMessageId = 0;
+                using var hookClient = new DiscordWebhookClient(hook);
+                if (message.Attachments.Any())
+                {
+                    using var resend = new ResendAttachments(http, message);
+                    newMessageId = await hookClient.SendFilesAsync(await resend.GetAttachments(),
+                        text: message.Content,
+                        username: message.Author.Username
+                    );
+                }
+                else
+                {
+                    newMessageId = await hookClient.SendMessageAsync(
+                        text: message.Content,
+                        username: message.Author.Username
+                    );
+                }
+
+                await hookClient.DeleteWebhookAsync();
+
+                var newMessage = await moveTo.GetMessageAsync(newMessageId);
+                await result.FollowupAsync("Message moved", ephemeral: true);
+                await moveTo.SendMessageAsync($"{message.Author.Mention}, your message was moved here from {MentionUtils.MentionChannel(message.Channel.Id)}", messageReference: new(newMessage.Id));
+                await message.DeleteAsync();
+
+                awaiter.Stop();
+            }
+            catch (Exception e)
+            {
+                logger.LogError(e, "Failed to move message");
+                await defer;
+                await result.FollowupAsync("There was an error moving the message");
+            }
+        });
+    }
+
+    private static Embed[] MakeEmbeds(IMessage message)
+    {
+        var list = message.Embeds.Select(x => x.ToEmbedBuilder().Build()).ToList();
+        if (!string.IsNullOrEmpty(message.Content))
+        {
+            list.Insert(0, new EmbedBuilder()
+                .WithAuthor(message.Author)
+                .WithDescription(message.Content)
+                .Build());
+        }
+        
+        return list.ToArray();
+    }
+
+    private class ResendAttachments : IDisposable
+    {
+        public ResendAttachments(HttpClient http, IMessage message)
+        {
+            this.http = http;
+            this.message = message;
+        }
+
+        public void Dispose()
+        {
+            foreach (var stream in streams)
+                stream.Dispose();
+            streams.Clear();
+        }
+
+        public async Task<FileAttachment[]> GetAttachments()
+        {
+            int i = 0;
+            var result = new FileAttachment[message.Attachments.Count];
+            foreach (var attachment in message.Attachments)
+            {
+                var ms = new MemoryStream();
+                using var response = await http.GetAsync(attachment.Url);
+                var stream = await response.Content.ReadAsStreamAsync();
+                stream.CopyTo(ms);
+                ms.Position = 0;
+
+                streams.Add(ms);
+                result[i++] = new FileAttachment(ms, attachment.Filename, attachment.Description, attachment.IsSpoiler());
+            }
+
+            return result;
+        }
+
+        private List<MemoryStream> streams = new();
+        private readonly HttpClient http;
+        private readonly IMessage message;
     }
 
     public ModeratorModule(RapsheetApi rapsheet, AuditApi audit, StaffApi staffApi, ILogger<ModeratorModule> logger, HttpClient http)
