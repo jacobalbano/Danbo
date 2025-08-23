@@ -137,13 +137,13 @@ public class ModeratorModule : ModuleBase
         [Summary(description: "Delete recent messages?")] bool? deleteMessages = null
     )
     {
-        var defer = DeferAsync();
+        var defer = DeferAsync(ephemeral: true);
 
         await Context.Guild.AddBanAsync(user, pruneDays: deleteMessages == true ? 1 : 0, message);
         var infraction = rapsheet.Add(Context.User.Id, InfractionType.Ban, user.Id, message);
 
         try { await staffApi.PostToStaffLog(infraction); }
-        catch (Exception e) { logger.LogError("Couldn't post to staff log", e); }
+        catch (Exception e) { logger.LogError(e, "Couldn't post to staff log"); }
 
         await defer;
 
@@ -154,43 +154,28 @@ public class ModeratorModule : ModuleBase
             .WithColor(infraction.Type.ToColor())
             .Build();
 
-        var followup = await FollowupAsync(embed: embed);
+        await Context.Channel.SendMessageAsync(embed: embed);
 
         audit.Log("User banned", Context.User.Id, user.Id, DetailIdType.User, message);
-        await FollowupAsync(ephemeral: true, embed: new EmbedBuilder()
-            .WithAuthor(MakeAuthor(user))
-            .WithTitle("User banned")
-            .Build());
+        var followup = await FollowupAsync(ephemeral: true, embed: EmbedUtility.Message("User banned."));
 
         if (deleteMessages == null)
         {
             using var awaiter = new InteractionAwaiter(Context);
             var confirm = awaiter.Signal();
-            var cancel = awaiter.Signal();
 
             var components = new ComponentBuilder()
-                .WithButton("Purge recent messages", confirm.InteractionId, ButtonStyle.Danger)
-                .WithButton("Cancel", cancel.InteractionId, ButtonStyle.Secondary);
+                .WithButton("Purge recent messages", confirm.InteractionId, ButtonStyle.Danger);
 
             await ModifyOriginalResponseAsync(x => x.Components = components.Build());
 
             await awaiter.HandleInteractionsAsync(async signal =>
             {
-                if (signal.Interaction is not SocketMessageComponent component)
+                if (signal.Interaction is not SocketMessageComponent component || signal != confirm)
                     return;
-
-                if (signal.Interaction.User != Context.User)
-                {
-                    await signal.Interaction.RespondAsync("Only the user who ran the command can interact with it.", ephemeral: true);
-                    return;
-                }
-
-                if (signal == cancel) awaiter.Stop();
-                if (signal != confirm) return;
 
                 await component.UpdateAsync(x => x.Components = new ComponentBuilder()
                     .WithButton("Purge in progress", confirm.InteractionId, ButtonStyle.Danger, disabled: true)
-                    .WithButton("Cancel", cancel.InteractionId, ButtonStyle.Secondary, disabled: true)
                     .Build());
 
                 var results = new List<IMessage>();
@@ -363,7 +348,7 @@ public class ModeratorModule : ModuleBase
             .Select(x => $"{x.Type.ToEmoji()} by {MentionUtils.MentionUser(x.ModeratorId)} (<t:{x.InfractionInstant.ToUnixTimeSeconds()}:d>) - {x.Message}");
 
         await defer;
-        await ShowRapsheetTable(messages);
+        await ShowRapsheetTable(messages, user);
     }
 
     [SlashCommand("rapsheet-search", "Search for rapsheet entries by type or keyword")]
@@ -380,7 +365,7 @@ public class ModeratorModule : ModuleBase
             .Select(x => $"{x.Type.ToEmoji()} by {MentionUtils.MentionUser(x.ModeratorId)} (<t:{x.InfractionInstant.ToUnixTimeSeconds()}:d> ) {MentionUtils.MentionUser(x.UserId)} -  {x.Message}");
 
         await defer;
-        await ShowRapsheetTable(messages);
+        await ShowRapsheetTable(messages, null);
     }
 
     [SlashCommand("remove-infraction", "Remove an entry from a user's record")]
@@ -579,7 +564,7 @@ public class ModeratorModule : ModuleBase
         this.http = http;
     }
 
-    private async Task ShowRapsheetTable(IEnumerable<string> messages)
+    private async Task ShowRapsheetTable(IEnumerable<string> messages, IUser user = null)
     {
         int page = 0;
         using var handler = new InteractionAwaiter(Context);
@@ -587,7 +572,7 @@ public class ModeratorModule : ModuleBase
         var prevSignal = handler.Signal();
         var nextSignal = handler.Signal();
         var lastSignal = handler.Signal();
-        var build = () => BuildRapsheet(messages, page, firstSignal, prevSignal, nextSignal, lastSignal);
+        var build = () => BuildRapsheet(messages, page, firstSignal, prevSignal, nextSignal, lastSignal, user);
 
         var (embed, components) = build();
         var followup = await FollowupAsync(embed: embed, components: components);
@@ -608,7 +593,7 @@ public class ModeratorModule : ModuleBase
 
         await followup.ModifyAsync(x => x.Components = new ComponentBuilder().Build());
 
-        static (Embed, MessageComponent) BuildRapsheet(IEnumerable<string> infractions, int page, IInteractionSignal firstSignal, IInteractionSignal prevSignal, IInteractionSignal nextSignal, IInteractionSignal lastSignal)
+        static (Embed, MessageComponent) BuildRapsheet(IEnumerable<string> infractions, int page, IInteractionSignal firstSignal, IInteractionSignal prevSignal, IInteractionSignal nextSignal, IInteractionSignal lastSignal, IUser user)
         {
             var list = new List<string>();
             var e = infractions
@@ -627,12 +612,14 @@ public class ModeratorModule : ModuleBase
                 canGoNext = false;
 
             var embed = new EmbedBuilder()
+                .WithFooter(MakeRapsheetFooter())
+                .WithDescription(list.Aggregate(new StringBuilder(), (sb, x) => sb.AppendLine(x)).ToString())
                 .WithTitle(list.Any()
                     ? $"Rapsheet search (Showing results {page * 5 + 1} - {page * 5 + list.Count} of {infractions.Count()})"
-                    : "No results")
-            .WithFooter(MakeRapsheetFooter())
-                .WithDescription(list.Aggregate(new StringBuilder(), (sb, x) => sb.AppendLine(x))
-                    .ToString());
+                    : "No results");
+
+            if (user != null)
+                embed = embed.WithAuthor(user);
 
             var components = new ComponentBuilder()
                 .WithButton("<<", firstSignal.InteractionId, disabled: page == 0)
@@ -648,7 +635,7 @@ public class ModeratorModule : ModuleBase
     private readonly AuditApi audit;
     private readonly StaffApi staffApi;
     private readonly ILogger logger;
-    private HttpClient http;
+    private readonly HttpClient http;
 
     private static EmbedAuthorBuilder MakeAuthor(IUser user) => new EmbedAuthorBuilder()
         .WithName(user.Username)

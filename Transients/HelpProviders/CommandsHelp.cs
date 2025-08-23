@@ -1,4 +1,5 @@
 ﻿using Danbo.Services;
+using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
@@ -17,37 +18,25 @@ internal class CommandsHelp : IHelpProvider
 
     public async IAsyncEnumerable<string> FeaturesAvailable(IInteractionContext context)
     {
-        var idDictTask = Task.Run(async () => (await guild.GetApplicationCommandsAsync()).ToDictionary(x => x.Name));
         foreach (var item in commands.SlashCommands)
         {
             var result = await item.CheckPreconditionsAsync(context, services);
             if (result.IsSuccess)
             {
-                var dict = await idDictTask;
-                var dictKey = item.Module.IsSlashGroup && !item.IgnoreGroupNames
-                    ? item.Module.SlashGroupName
-                    : item.Name;
-
-                if (!dict.TryGetValue(dictKey, out var command))
-                    continue;
-
-                var displayName = item.Module.IsSlashGroup && !item.IgnoreGroupNames
-                    ? item.ToString()
-                    : item.Name;
-                yield return $"</{displayName}:{command.Id}> - {item.Description}";
+                var embed= await commandUtil.GetCommandMention(item);
+                yield return $"{embed} - {item.Description}";
             }
         }
     }
 
-    public CommandsHelp(DiscordSocketClient discord, ScopedGuildId guildId, InteractionService commands, IServiceProvider services)
+    public CommandsHelp(InteractionService commands, IServiceProvider services, CommandUtility commandUtil)
     {
         this.commands = commands;
         this.services = services;
-        if (guildId.Id is ulong id)
-            guild = discord.GetGuild(id);
+        this.commandUtil = commandUtil;
     }
 
-    private readonly SocketGuild guild;
     private readonly InteractionService commands;
     private readonly IServiceProvider services;
+    private readonly CommandUtility commandUtil;
 }

@@ -6,6 +6,7 @@ using Danbo.Services;
 using Danbo.Utility;
 using Discord;
 using Discord.Interactions;
+using Discord.WebSocket;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -102,6 +103,8 @@ public partial class UserRoleModule : ModuleBase
             sb.AppendLine("The following roles are available for self-assignment:");
             foreach (var role in allRoles)
                 sb.AppendLine($"- {MentionUtils.MentionRole(role)}");
+
+            sb.AppendLine($"### Use {await commandUtil.GetCommandMention((methodof<Func<string, Task>>)Assign)} to assign a role");
         }
         else
         {
@@ -114,12 +117,14 @@ public partial class UserRoleModule : ModuleBase
             .Build());
     }
 
-    public UserRoleModule(AuditApi audit, UserRoleApi userRoles)
+    public UserRoleModule(DiscordSocketClient discord, ScopedGuildId guildId, CommandUtility commandUtil, AuditApi audit, UserRoleApi userRoles)
     {
+        this.commandUtil = commandUtil;
         this.audit = audit;
         this.userRoles = userRoles;
     }
 
+    private readonly CommandUtility commandUtil;
     private readonly AuditApi audit;
     private readonly UserRoleApi userRoles;
 }

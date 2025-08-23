@@ -37,15 +37,13 @@ public class OntopicModule : ModuleBase
             {
                 await defer;
                 await FollowupAsync(embed: EmbedUtility.Error(@"
-                Please limit your use of this command to intervals of 30 days or less.
-                For longer terms, contact a moderator directly."
+                    Please limit your use of this command to intervals of 30 days or less.
+                    For longer terms, contact a moderator directly."
                 ));
                 return;
             }
 
             var expiration = SystemClock.Instance.GetCurrentInstant() + duration;
-            await ontopic.AddOntopicToUser((IGuildUser)Context.User, expiration);
-
             var embed = EmbedUtility.Message(
                 $"Ontopic applied until <t:{expiration.ToUnixTimeSeconds()}:f>"
             );
@@ -53,6 +51,8 @@ public class OntopicModule : ModuleBase
             await FollowupAsync(embed: embed);
             try { await Context.User.SendMessageAsync(embed: embed); }
             catch (Exception) { }
+
+            await ontopic.AddOntopicToUser((IGuildUser)Context.User, expiration);
         }
         catch (UserFacingError e)
         {

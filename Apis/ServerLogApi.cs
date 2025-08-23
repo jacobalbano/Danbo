@@ -1,16 +1,17 @@
-﻿using Danbo.Services;
+﻿using Danbo.Models.Config;
+using Danbo.Models.Jobs;
+using Danbo.Services;
 using Danbo.Utility.DependencyInjection;
 using Discord;
+using Discord.WebSocket;
+using Microsoft.Extensions.Logging;
+using Microsoft.VisualBasic;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using static System.Net.Mime.MediaTypeNames;
-using Danbo.Models.Config;
-using Discord.WebSocket;
-using Microsoft.Extensions.Logging;
-using Danbo.Models.Jobs;
 
 namespace Danbo.Apis;
 
@@ -61,7 +62,8 @@ internal class ServerLogApi
                     .WithAuthor(update.Message.Author)
                     .WithDescription($"[Jump to message](<{update.Message.GetJumpUrl()}>)")
                     .WithTitle($"Message updated in {update.Channel.Mention}")
-                    .AddField("Member", update.Message.Author.Mention);
+                    .AddField("Member", update.Message.Author.Mention)
+                    .AddField("MemberId", update.Message.Author.Id);
 
                 builders.Add(new EmbedBuilder()
                     .WithTitle("New value")
@@ -73,12 +75,14 @@ internal class ServerLogApi
                 if (delete.Message != null)
                     mainEmbed
                         .WithAuthor(delete.Message.Author)
-                        .AddField("Member", delete.Message.Author.Mention);
+                        .AddField("Member", delete.Message.Author.Mention)
+                    .AddField("MemberId", delete.Message.Author.Id);
                 break;
             case UserLeftLogJob userLeft:
                 color = Color.DarkTeal;
                 mainEmbed.WithTitle("User left")
-                    .AddField("Member", userLeft.User.Mention);
+                    .AddField("Member", userLeft.User.Mention)
+                    .AddField("MemberId", userLeft.User.Id);
                 break;
             default:
                 logger.LogWarning($"Unhandled {nameof(ServerLogJob)} subclass {{jobTypeName}}", work.GetType().Name);
